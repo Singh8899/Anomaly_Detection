@@ -28,11 +28,12 @@ DATASET_OBJECTS:
 MODELS_CONFIG:
   base_autoencoder:
     batch_size: 16
-    num_epochs: 10
-  othmane:
+    num_epochs: 30
+    validation_split: 0.1
+  ottthmane_demo:
     batch_size: 32
     num_epochs: 20
-  carlo:
+  sksksarlo_demo:
     batch_size: 64
     num_epochs: 15
 
