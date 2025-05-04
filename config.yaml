@@ -1,0 +1,26 @@
+DATASET_PATH: "/home/jaspinder/.cache/kagglehub/datasets/mvtec-ad"
+OUTPUT_PATH: "/home/jaspinder/Github/Anomaly_Detection"
+DATASET_OBJECTS:
+  - bottle
+  - cable
+  - can # REC
+  - capsule
+  - carpet
+  - fabric # REC
+  - fruit_jelly
+  - grid
+  - hazelnut # REC
+  - leather
+  - metal_nut
+  - pill
+  - rice # REC
+  - screw
+  - sheet_metal
+  - tile
+  - toothbrush
+  - transistor
+  - vial
+  - wallplugs # REC
+  - walnuts # REC
+  - wood
+  - zipper
