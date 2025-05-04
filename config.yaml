@@ -23,4 +23,16 @@ DATASET_OBJECTS:
   - wallplugs # REC
   - walnuts # REC
   - wood
-  - zipper
+  - zipper:
+
+MODELS_CONFIG:
+  base_autoencoder:
+    batch_size: 16
+    num_epochs: 10
+  othmane:
+    batch_size: 32
+    num_epochs: 20
+  carlo:
+    batch_size: 64
+    num_epochs: 15
+
