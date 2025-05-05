@@ -1,5 +1,4 @@
 DATASET_PATH: "/home/jaspinder/.cache/kagglehub/datasets/mvtec-ad"
-OUTPUT_PATH: "/home/jaspinder/Github/Anomaly_Detection"
 DATASET_OBJECTS:
   - bottle
   - cable
@@ -31,9 +30,12 @@ MODELS_CONFIG:
     batch_size: 16
     num_epochs: 30
     validation_split: 0.1
+    learning_rate: 1e-3
+
   ottthmane_demo:
     batch_size: 32
     num_epochs: 20
+    
   sksksarlo_demo:
     batch_size: 64
     num_epochs: 15
