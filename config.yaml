@@ -23,10 +23,11 @@ DATASET_OBJECTS:
   - wallplugs # REC
   - walnuts # REC
   - wood
-  - zipper:
+  - zipper
 
 MODELS_CONFIG:
   base_autoencoder:
+    model_name: "base_autoencoder_1"
     batch_size: 16
     num_epochs: 30
     validation_split: 0.1
