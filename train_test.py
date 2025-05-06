@@ -4,6 +4,18 @@ import yaml
 from base_autoencoder import BaseAutoencoder
 
 def parse_arguments():
+    """
+    Parse command-line arguments for the anomaly detection script.
+    This function sets up an argument parser to handle various command-line options needed for running the script:
+        --config (str): Path to the configuration file. Default is "config.yaml".
+        --product_class (str): Name of the product class to process (or 'all' for all classes). Default is "hazelnut".
+        --model_name (str): Identifier for the model to be used. Default is "base".
+        --train_path (str): Filesystem path to the training outputs. Default is None.
+        --test_path (str): Filesystem path to save or retrieve testing results. Default is "/home/jaspinder/Github/Anomaly_Detection".
+        --mode (str): Operational mode of the script, either "train" for training or "test" for evaluation. Default is "train".
+    Returns:
+        argparse.Namespace: An object containing the parsed command-line arguments as attributes.
+    """
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Anomaly Detection Script")
     parser.add_argument('--config',     type=str, default="config.yaml",    help="Path to the configuration file")
@@ -14,7 +26,6 @@ def parse_arguments():
     parser.add_argument('--mode',       type=str, default="train",          help="'train' or 'test'")
     
     return parser.parse_args()
-
 
 def main():
     """Main function for anomaly detection."""
@@ -30,7 +41,8 @@ def main():
         model = BaseAutoencoder(args.product_class, args.config, args.train_path, args.test_path)
         if args.mode == "train":
             model.train()
-            model.save_model(args)
+            mean_error, std_error, threshold = model.compute_thresh()
+            model.save_model(args, mean_error, std_error, threshold)
         else:
             model.test()
 

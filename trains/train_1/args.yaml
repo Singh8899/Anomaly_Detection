@@ -1,0 +1,6 @@
+config: config.yaml
+mode: train
+model_name: base
+product_class: hazelnut
+test_path: /home/jaspinder/Github/Anomaly_Detection
+train_path: /home/jaspinder/Github/Anomaly_Detection/trains/train_1
