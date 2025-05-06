@@ -176,7 +176,7 @@ class BaseAutoencoder():
             sample = el["sample"].to(self.device)
             gt_anomaly = np.array(["bad" in path for path in el["image_path"]],dtype=int)
 
-            with torch.no_grad():
+            with torch.inference_mode():
                 # Forward pass: unsqueeze to add batch dimension
                 reconstructed = self.model(sample)
             # Compute reconstruction error (MSE)
@@ -210,18 +210,9 @@ class BaseAutoencoder():
         for el in tqdm(self.train_dataset, desc="Processing train dataset"):
             # Get the input image and its path
             sample      = el["sample"].to(self.device)
-            # output_path = el["rel_out_path_thresh"]
             # Perform forward pass to get the reconstructed image
             with torch.no_grad():
                 reconstructed = self.model(sample)
-
-            # # Convert the reconstructed image to a format suitable for saving
-            # reconstructed_image = reconstructed.squeeze(0).permute(1, 2, 0).cpu().numpy()
-            # reconstructed_image = (reconstructed_image * 255).astype(np.uint8)
-
-            # # Save the reconstructed image
-            # os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            # Image.fromarray(reconstructed_image).save(output_path)
 
             # Compute the squared difference between the input and reconstructed image
             squared_difference = (sample - reconstructed) ** 2
@@ -233,13 +224,6 @@ class BaseAutoencoder():
             anomaly_score = np.mean(difference_image)
             anomaly_scores.append(anomaly_score)
 
-            # # Normalize the difference image to the range [0, 255]
-            # difference_image = (difference_image * 255).astype(np.uint8)
-
-            # # Save the difference image (mask)
-            # mask_output_path = output_path.replace(".png", "_mask.png")
-            # Image.fromarray(difference_image).save(mask_output_path)
-        # print(f"Reconstructed images saved to {output_path}")
         # Print the mean anomaly score
         print(f"Mean Anomaly Score: {np.mean(anomaly_scores)}")
         # Compute mean (μ) and standard deviation (σ) of anomaly scores

@@ -49,5 +49,6 @@ def main():
     ### TODO can add more models here with elif
     else:
         raise ValueError(f"Model name '{args.model_name}' not defined.")
+    
 if __name__ == "__main__":
     main()
