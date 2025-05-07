@@ -125,7 +125,7 @@ class BaseAutoencoder():
             self.model.eval()
             val_loss = 0.0
             reconstruction_errors = []
-            with torch.no_grad():
+            with torch.inference_mode:
                 for batch in tqdm(val_loader, desc=f"Epoch {epoch + 1}/{num_epochs} - Validation", leave=False):
                     # Transfer validation images to the device
                     inputs = batch["sample"].to(self.device)

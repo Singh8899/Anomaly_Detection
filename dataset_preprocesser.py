@@ -12,7 +12,7 @@ from torchvision.transforms.functional  import to_tensor
 
 
 # Load configuration from config.yaml
-config_path = "/home/jaspinder/Github/Anomaly_Detection/config.yaml"
+config_path = "config.yaml"
 with open(config_path, "r") as file:
     config = yaml.safe_load(file)
 
