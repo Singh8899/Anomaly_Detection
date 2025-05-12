@@ -60,6 +60,9 @@ class TransAEManager():
             T_max=int(self.model_config.get("num_epochs")),
             eta_min=float(self.model_config.get("min_lr"))
         )
+        patience = int(self.model_config.get("patience"))
+        delta = float(self.model_config.get("delta"))
+        self.early_stopping = EarlyStopping(patience=patience, delta=delta, verbose=False)
 
     def train(self):
         """
@@ -93,19 +96,19 @@ class TransAEManager():
         print(f"Training on {len(train_subset)} samples, validating on {len(val_subset)} samples.")
         
         # Create DataLoaders for training and validation
-        train_loader = DataLoader(train_subset, 
+        self.train_loader = DataLoader(train_subset, 
                                   batch_size=batch_size, 
                                   shuffle=True,
                                   num_workers=num_workers)
 
-        val_loader = DataLoader(val_subset, 
+        self.val_loader = DataLoader(val_subset, 
                                 batch_size=batch_size, 
                                 shuffle=False,
                                 num_workers=num_workers)
         
         # Training and validation loop
         print("Starting training...")
-        print(summary(self.model, input_size=(1, 3, 256, 256)))
+        print(summary(self.model, input_size=(batch_size, 3, 256, 256)))
         best_val = float('inf')
         best_epoch = 0
         for epoch in range(num_epochs):
@@ -113,7 +116,7 @@ class TransAEManager():
             self.model.train()
             
             epoch_loss = 0.0
-            for batch in tqdm(train_loader, desc=f"Epoch {epoch + 1}/{num_epochs} - Training", leave=False):
+            for batch in tqdm(self.train_loader, desc=f"Epoch {epoch + 1}/{num_epochs} - Training", leave=False):
                 # Transfer input images to the device
                 inputs = batch["sample"].to(self.device)
 
@@ -134,7 +137,7 @@ class TransAEManager():
             # Update learning rate scheduler after each epoch
             self.scheduler.step()
 
-            avg_train_loss = epoch_loss / len(train_loader)
+            avg_train_loss = epoch_loss / len(self.train_loader)
             writer.add_scalar("Loss/Train", avg_train_loss, epoch + 1)
                 
             # Validation phase: set model to evaluation mode
@@ -142,7 +145,7 @@ class TransAEManager():
             val_loss = 0.0
             reconstruction_errors = []
             with torch.inference_mode():
-                for batch in tqdm(val_loader, desc=f"Epoch {epoch + 1}/{num_epochs} - Validation", leave=False):
+                for batch in tqdm(self.val_loader, desc=f"Epoch {epoch + 1}/{num_epochs} - Validation", leave=False):
                     # Transfer validation images to the device
                     inputs = batch["sample"].to(self.device)
 
@@ -152,14 +155,21 @@ class TransAEManager():
                     # Compute validation loss
                     loss = self.criterion(outputs, features)
                     
-                    # Calculate per-image reconstruction error by averaging squared error per image
-                    per_image_error = torch.mean((features - outputs) ** 2, dim=(1, 2, 3))
-                    reconstruction_errors.extend(per_image_error.cpu().numpy())
+                    # Compute the difference vector at each spatial location
+                    diff = features - outputs  # shape (B, C, H, W)
+                    
+                    # Calculate the pixel-level anomaly map by computing the L2 norm across channels (for each pixel)
+                    anomaly_map = torch.linalg.norm(diff, dim=1)  # shape (B, C, H, W) -> (B, H, W)
+                    
+                    # Pool the anomaly map of shape (B, 16, 16) to a single value per image using adaptive max pooling.
+                    img_anomaly_score = torch.nn.functional.adaptive_max_pool2d(anomaly_map, (1, 1)).reshape(anomaly_map.shape[0])
+                    
+                    reconstruction_errors.extend(img_anomaly_score.cpu().numpy())
 
                     # Accumulate validation loss for the epoch
                     val_loss += loss.item()
-
-            avg_val_loss = val_loss / len(val_loader)
+            self.early_stopping.check_early_stop(val_loss)
+            avg_val_loss = val_loss / len(self.val_loader)
             mean_rec_error = torch.tensor(reconstruction_errors).mean().item()
             std_rec_error = torch.tensor(reconstruction_errors).std().item()
             print("==========================================")
@@ -174,7 +184,12 @@ class TransAEManager():
                 best_epoch = epoch + 1
                 torch.save(self.model.state_dict(), os.path.join(self.train_path, "autoencoder_weights.pth"))
                 print(f"Best model updated at Epoch {best_epoch} with MSE-Mean: {mean_rec_error:>.6f}")
-                
+
+            self.early_stopping.check_early_stop(mean_rec_error)
+            if self.early_stopping.stop_training:
+                print(f"Early stopping at epoch {epoch}")
+                break
+
         writer.close()
         print("Training completed.")
 
@@ -189,30 +204,36 @@ class TransAEManager():
         self.test_dataset = MVTecAD2(self.product_class, "test", self.test_path, transform=self.transform)
         batch_size = int(self.model_config.get("batch_size"))
         num_workers = int(self.model_config.get("num_workers"))
-        train_loader = DataLoader(self.test_dataset, 
+        test_loader = DataLoader(self.test_dataset, 
                             batch_size=batch_size, 
                             shuffle=True,
                             num_workers=num_workers)
         
-        for el in train_loader:
+        for el in test_loader:
             # Get the input image and move to device. Add a batch dimension.
             sample = el["sample"].to(self.device)
             gt_anomaly = np.array(["bad" in path for path in el["image_path"]],dtype=int)
 
             with torch.inference_mode():
                 # Forward pass: unsqueeze to add batch dimension
-                reconstructed = self.model(sample)
+                reconstructed, features = self.model(sample)
             # Compute reconstruction error (MSE)
             stats_path = os.path.join(self.train_path, "training_statistics.yaml")
             with open(stats_path, "r") as file:
                 stats = yaml.safe_load(file)
             threshold = float(stats["threshold"])
 
-            # Compute per-image MSE and binarize based on the loaded threshold
-            # Compute pixel-wise squared error and average across channels to obtain a 2D error map per image
-            error = torch.mean((sample - reconstructed) ** 2, dim=(1,2,3)).cpu().numpy()  # shape: (batch, )
-            # Binarize the error mask based on the threshold for each pixel
-            error_mask = (error > threshold).astype(int)
+    
+            # Compute the difference vector at each spatial location
+            diff = features - reconstructed  # shape (B, C, H, W)
+            
+            # Calculate the pixel-level anomaly map by computing the L2 norm across channels (for each pixel)
+            anomaly_map = torch.linalg.norm(diff, dim=1)  # shape (B, C, H, W) -> (B, H, W)
+            
+            # Pool the anomaly map of shape (B, 16, 16) to a single value per image using adaptive max pooling.
+            img_anomaly_score = torch.nn.functional.adaptive_max_pool2d(anomaly_map, (1, 1)).reshape(anomaly_map.shape[0]).cpu().numpy()
+            
+            error_mask = (img_anomaly_score > threshold).astype(int)
 
             test_scores.extend(error_mask)
             
@@ -229,23 +250,26 @@ class TransAEManager():
         # Set the autoencoder to evaluation mode
         self.model.eval()
         anomaly_scores = []
+
         # Perform inference on the test dataset
-        for el in tqdm(self.train_dataset, desc="Processing train dataset"):
+        for el in tqdm(self.train_loader, desc="Processing train dataset"):
             # Get the input image and its path
             sample      = el["sample"].to(self.device)
             # Perform forward pass to get the reconstructed image
             with torch.inference_mode():
-                reconstructed = self.model(sample)
+                reconstructed, features = self.model(sample)
 
-            # Compute the squared difference between the input and reconstructed image
-            squared_difference = (sample - reconstructed) ** 2
+            # Compute the difference vector at each spatial location
+            diff = features - reconstructed  # shape (B, C, H, W)
+            
+            # Calculate the pixel-level anomaly map by computing the L2 norm across channels (for each pixel)
+            anomaly_map = torch.linalg.norm(diff, dim=1)  # shape (B, C, H, W) -> (B, H, W)
+            
+            # Pool the anomaly map of shape (B, 16, 16) to a single value per image using adaptive max pooling.
+            img_anomaly_score = torch.nn.functional.adaptive_max_pool2d(anomaly_map, (1, 1)).reshape(anomaly_map.shape[0])
 
-            # Compute the mean along the channels
-            difference_image = torch.mean(squared_difference, dim=0).squeeze(0).cpu().numpy()
-
-            # Compute the anomaly score
-            anomaly_score = np.mean(difference_image)
-            anomaly_scores.append(anomaly_score)
+  
+            anomaly_scores.extend(img_anomaly_score.cpu().numpy())
 
         # Print the mean anomaly score
         print(f"Mean Anomaly Score: {np.mean(anomaly_scores)}")
@@ -298,6 +322,26 @@ class TransAEManager():
             yaml.dump(stats, file)
         print(f"Training statistics saved to {stats_save_path}")
 
+class EarlyStopping:
+    def __init__(self, patience=5, delta=0, verbose=False):
+        self.patience = patience
+        self.delta = delta
+        self.verbose = verbose
+        self.best_loss = None
+        self.no_improvement_count = 0
+        self.stop_training = False
+    
+    def check_early_stop(self, val_loss):
+        if self.best_loss is None or val_loss < self.best_loss - self.delta:
+            self.best_loss = val_loss
+            self.no_improvement_count = 0
+        else:
+            self.no_improvement_count += 1
+            if self.no_improvement_count >= self.patience:
+                self.stop_training = True
+                if self.verbose:
+                    print("Stopping early as no improvement has been observed.")
+
 
 class TransformerAE(nn.Module):
     def __init__(self):
@@ -346,7 +390,7 @@ class TransformerAE(nn.Module):
         tokenized = self.tokenizer(unified)
         B, C, H, W = tokenized.shape
         
-        # Reshape to (sequence_length, batch, embed_dim) where sequence_length = H * W
+        # Reshape to (batch, sequence_length, embed_dim) where sequence_length = H * W
         tokens = tokenized.reshape(B, C, H * W).permute(0, 2, 1)
         
         # Prepare decoder queries: expand learned embedding for the current batch (B, sequence_length, 256)
