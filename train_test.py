@@ -1,8 +1,8 @@
 import argparse
 import yaml
 
-from base_autoencoder import BaseAutoencoder
-
+from base_autoencoder import BaseAEManager
+from trafo_autoencoder import TransAEManager
 def parse_arguments():
     """
     Parse command-line arguments for the anomaly detection script.
@@ -20,7 +20,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Anomaly Detection Script")
     parser.add_argument('--config',     type=str, default="config.yaml",    help="Path to the configuration file")
     parser.add_argument('--product_class',      type=str, default="hazelnut",       help="class name or 'all")
-    parser.add_argument('--model_name', type=str, default="base",           help="Name of the model to use")
+    parser.add_argument('--model_name', type=str, default="trafo",           help="Name of the model to use")
     parser.add_argument('--train_path', type=str, default=None,             help="Path to the training output")
     parser.add_argument('--test_path',  type=str, default="/home/jaspinder/Github/Anomaly_Detection",             help="Path to the testing results")
     parser.add_argument('--mode',       type=str, default="train",          help="'train' or 'test'")
@@ -38,7 +38,7 @@ def main():
         raise ValueError("Invalid mode. Please specify 'train' or 'test'.")
 
     if args.model_name == "base":
-        model = BaseAutoencoder(args.product_class, args.config, args.train_path, args.test_path)
+        model = BaseAEManager(args.product_class, args.config, args.train_path, args.test_path)
         if args.mode == "train":
             model.train()
             mean_error, std_error, threshold = model.compute_thresh()
@@ -46,6 +46,14 @@ def main():
         else:
             model.test()
 
+    elif args.model_name == "trafo":
+        model = TransAEManager(args.product_class, args.config, args.train_path, args.test_path)
+        if args.mode == "train":
+            model.train()
+            mean_error, std_error, threshold = model.compute_thresh()
+            model.save_model(args, mean_error, std_error, threshold)
+        else:
+            model.test()
     ### TODO can add more models here with elif
     else:
         raise ValueError(f"Model name '{args.model_name}' not defined.")

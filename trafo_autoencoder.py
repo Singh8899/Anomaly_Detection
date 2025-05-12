@@ -2,11 +2,13 @@ import os
 import yaml
 import numpy as np
 from PIL                        import Image
-
+from torchinfo import summary
 import torch
 import torch.nn as nn
 from torch.utils.data           import DataLoader
 from torch.utils.tensorboard    import SummaryWriter
+from torchvision.models         import efficientnet_b4, EfficientNet_B4_Weights
+from torch.optim.lr_scheduler   import CosineAnnealingLR
 
 from torchvision                import transforms
 
@@ -20,7 +22,9 @@ from sklearn.metrics import roc_auc_score
 import os
 
 
-class BaseAEManager():
+
+
+class TransAEManager():
     def __init__(self, product_class, config_path, train_path, test_path):
         self.config_path = config_path
         self.train_path = train_path
@@ -31,20 +35,31 @@ class BaseAEManager():
         with open(self.config_path, "r") as file:
             self.config = yaml.safe_load(file)
         self.model_config = self.config['MODELS_CONFIG']
-        self.model_config = self.model_config['base_autoencoder']
+        self.model_config = self.model_config['trafo_autoencoder']
 
         # Set device
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Initialize model, loss function, and optimizer
-        self.model = Autoencoder()
+        self.model = TransformerAE()
+        for param in self.model.backbone.parameters():
+            param.requires_grad = False
+
         self.criterion = nn.MSELoss()
+
+        
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=float(self.model_config['learning_rate']))
 
         self.transform = transforms.Compose([
-            transforms.Resize((224, 224)),
+            transforms.Resize((256, 256)),
             transforms.ToTensor()
         ])
+        # Initialize cosine annealing learning rate scheduler
+        self.scheduler = CosineAnnealingLR(
+            self.optimizer,
+            T_max=int(self.model_config.get("num_epochs")),
+            eta_min=float(self.model_config.get("min_lr"))
+        )
 
     def train(self):
         """
@@ -55,12 +70,6 @@ class BaseAEManager():
         """
         log_dir = os.path.join(self.train_path)
         writer = SummaryWriter(log_dir=log_dir)
-        
-        print(self.model)
-        
-        # Calculate and display the total number of parameters in the autoencoder
-        total_params = sum(p.numel() for p in self.model.parameters())
-        print(f"Total number of parameters in the autoencoder: {total_params}")
         
         # Retrieve hyperparameters from configuration
         batch_size          = int(self.model_config.get("batch_size"))
@@ -96,19 +105,23 @@ class BaseAEManager():
         
         # Training and validation loop
         print("Starting training...")
+        print(summary(self.model, input_size=(1, 3, 256, 256)))
+        best_val = float('inf')
+        best_epoch = 0
         for epoch in range(num_epochs):
             # Training phase: set model to training mode
             self.model.train()
+            
             epoch_loss = 0.0
             for batch in tqdm(train_loader, desc=f"Epoch {epoch + 1}/{num_epochs} - Training", leave=False):
                 # Transfer input images to the device
                 inputs = batch["sample"].to(self.device)
 
                 # Forward pass: compute reconstructed images
-                outputs = self.model(inputs)
+                outputs, features = self.model(inputs)
                 
                 # Compute the training loss (mean squared error)
-                loss = self.criterion(outputs, inputs)
+                loss = self.criterion(outputs, features)
 
                 # Backward pass: compute gradients and update weights
                 self.optimizer.zero_grad()
@@ -118,9 +131,12 @@ class BaseAEManager():
                 # Accumulate loss for the epoch
                 epoch_loss += loss.item()
 
+            # Update learning rate scheduler after each epoch
+            self.scheduler.step()
+
             avg_train_loss = epoch_loss / len(train_loader)
             writer.add_scalar("Loss/Train", avg_train_loss, epoch + 1)
-            
+                
             # Validation phase: set model to evaluation mode
             self.model.eval()
             val_loss = 0.0
@@ -131,13 +147,13 @@ class BaseAEManager():
                     inputs = batch["sample"].to(self.device)
 
                     # Forward pass on validation data
-                    outputs = self.model(inputs)
+                    outputs, features = self.model(inputs)
                     
                     # Compute validation loss
-                    loss = self.criterion(outputs, inputs)
+                    loss = self.criterion(outputs, features)
                     
                     # Calculate per-image reconstruction error by averaging squared error per image
-                    per_image_error = torch.mean((inputs - outputs) ** 2, dim=(1, 2, 3))
+                    per_image_error = torch.mean((features - outputs) ** 2, dim=(1, 2, 3))
                     reconstruction_errors.extend(per_image_error.cpu().numpy())
 
                     # Accumulate validation loss for the epoch
@@ -151,7 +167,14 @@ class BaseAEManager():
             writer.add_scalar("Loss/Validation", avg_val_loss, epoch + 1)
             writer.add_scalar("Reconstruction/Mean", mean_rec_error, epoch + 1)
             writer.add_scalar("Reconstruction/Std", std_rec_error, epoch + 1)
-        
+            
+            # Save the best epoch based on the lowest validation reconstruction mean error
+            if mean_rec_error < best_val:
+                best_val = mean_rec_error
+                best_epoch = epoch + 1
+                torch.save(self.model.state_dict(), os.path.join(self.train_path, "autoencoder_weights.pth"))
+                print(f"Best model updated at Epoch {best_epoch} with MSE-Mean: {mean_rec_error:>.6f}")
+                
         writer.close()
         print("Training completed.")
 
@@ -276,29 +299,65 @@ class BaseAEManager():
         print(f"Training statistics saved to {stats_save_path}")
 
 
-class Autoencoder(nn.Module):
+class TransformerAE(nn.Module):
     def __init__(self):
-        super(Autoencoder, self).__init__()
-        # Encoder
-        self.encoder = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=3, stride=2, padding=1),  # (B, 64, 112, 112)
-            nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),  # (B, 128, 56, 56)
-            nn.ReLU(),
-            nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1),  # (B, 256, 28, 28)
-            nn.ReLU(),
+        super().__init__()
+        # Backbone: EfficientNet-B4 feature extractor with pretrained weights
+        weights = EfficientNet_B4_Weights.DEFAULT
+        self.backbone = efficientnet_b4(weights=weights)
+        
+        # Transformer encoder-decoder
+        self.transformer = torch.nn.Transformer(
+            d_model=256,
+            nhead=8,
+            num_encoder_layers=4,
+            num_decoder_layers=4,
+            batch_first=True
         )
-        # Decoder
-        self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(256, 128, kernel_size=3, stride=2, padding=1, output_padding=1),  # (B, 128, 56, 56)
-            nn.ReLU(),
-            nn.ConvTranspose2d(128, 64, kernel_size=3, stride=2, padding=1, output_padding=1),  # (B, 64, 112, 112)
-            nn.ReLU(),
-            nn.ConvTranspose2d(64, 3, kernel_size=3, stride=2, padding=1, output_padding=1),  # (B, 3, 224, 224)
-            nn.Sigmoid(),  # Normalize output to [0, 1]
-        )
+        # Learned auxiliary query embedding for the decoder (sequence length = 16*16 = 256)
+        self.query_embed = nn.Parameter(torch.randn(16 * 16, 256))
+        
+        # Tokenization: 1x1 convolution to reduce the unified 720 channels to 256
+        self.tokenizer = nn.Conv2d(720, 256, kernel_size=1)
+        
+        # Define the layer indices from which to extract features
+        self.extract_layers = [1, 2, 3, 5, 7]
 
+        # To map 256-dim transformer outputs back up to 720 channels
+        self.proj = nn.Conv2d(256, 720, kernel_size=1)
+        
     def forward(self, x):
-        encoded = self.encoder(x)
-        decoded = self.decoder(encoded)
-        return decoded
+        # Pass input through the backbone features sequentially and extract features from specified layers.
+        feature_maps = []
+        out = x
+        for i, layer in enumerate(self.backbone.features):
+            out = layer(out)
+            if i in self.extract_layers:
+                # Resize feature maps if necessary to have H, W equal to 16
+                if out.shape[-2:] != (16, 16):
+                    out = torch.nn.functional.interpolate(out, size=(16, 16), mode='bilinear', align_corners=False)
+                feature_maps.append(out)
+        
+        # Concatenate the extracted feature maps along the channel dimension.
+        # The resulting unified feature map has shape [B, 720, 16, 16]
+        unified = torch.cat(feature_maps, dim=1)
+        
+        # Reduce the channel dimension from 720 to 256 with a 1x1 convolution.
+        tokenized = self.tokenizer(unified)
+        B, C, H, W = tokenized.shape
+        
+        # Reshape to (sequence_length, batch, embed_dim) where sequence_length = H * W
+        tokens = tokenized.reshape(B, C, H * W).permute(0, 2, 1)
+        
+        # Prepare decoder queries: expand learned embedding for the current batch (B, sequence_length, 256)
+        queries = self.query_embed.unsqueeze(0).expand(B, -1, -1)
+        
+        # Transformer encoder-decoder forward pass
+        transformed = self.transformer(tokens, queries)
+        
+        # Reshape transformer output back to spatial feature map (B, 256, H, W)
+        transformed = transformed.permute(0, 2, 1).reshape(B, 256, H, W)
+        
+        transformed = self.proj(transformed)  # -> (B, 720, 16, 16)
+        
+        return transformed, unified
