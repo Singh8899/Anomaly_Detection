@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data           import DataLoader
 from torch.utils.tensorboard    import SummaryWriter
-from torchvision.models         import efficientnet_b4, EfficientNet_B4_Weights
+from torchvision.models         import efficientnet_b4, EfficientNet_B4_Weights, resnet50, ResNet50_Weights
 from torch.optim.lr_scheduler   import CosineAnnealingLR
 
 from torchvision                import transforms
@@ -349,11 +349,14 @@ class TransformerAE(nn.Module):
     def __init__(self):
         super().__init__()
         # Backbone: EfficientNet-B4 feature extractor with pretrained weights
-        weights = EfficientNet_B4_Weights.DEFAULT
-        self.backbone = efficientnet_b4(weights=weights)
+        # weights = EfficientNet_B4_Weights.DEFAULT
+        # self.backbone = efficientnet_b4(weights=weights)
+        
+        # self.backbone = efficientnet_b4(weights=weights)
+        self.backbone = Feature_extractor()
         nhead = 8
-        patch_size = 16
-        self.d_model = 256
+        patch_size = 32
+        self.d_model = 512
         # Transformer encoder-decoder
         self.transformer = torch.nn.Transformer(
             d_model=self.d_model,
@@ -366,7 +369,7 @@ class TransformerAE(nn.Module):
         self.query_embed = nn.Parameter(torch.randn(patch_size * patch_size, self.d_model))
         
         # Tokenization: 1x1 convolution to reduce the unified 720 channels to 256
-        self.tokenizer = nn.Conv2d(720, self.d_model, kernel_size=1)
+        self.tokenizer = nn.Conv2d(1536, self.d_model, kernel_size=1)
 
         # positional encoding for the transformer
         self.positional_encoder = PositionalEncoding(
@@ -377,27 +380,27 @@ class TransformerAE(nn.Module):
         self.extract_layers = [1, 2, 3, 5, 7]
 
         # To map 256-dim transformer outputs back up to 720 channels
-        self.proj = nn.Conv2d(self.d_model, 720, kernel_size=1)
+        self.proj = nn.Conv2d(self.d_model, 1536, kernel_size=1)
         
     def forward(self, x):
         # Pass input through the backbone features sequentially and extract features from specified layers.
         _, _, _, DIM = x.shape
-        DIM = DIM // 16  # 16 for 256x256 images
+        DIM = 32
         feature_maps = []
-        out = x
-        for i, layer in enumerate(self.backbone.features):
-            out = layer(out)
-            if i in self.extract_layers:
-                # Resize feature maps if necessary to have H, W equal to DIM
-                if out.shape[-2:] != (DIM, DIM):
-                    out = torch.nn.functional.interpolate(out, size=(DIM, DIM), mode='bilinear', align_corners=False)
-                feature_maps.append(out)
-        
+        # out = x
+        # for i, layer in enumerate(self.backbone.features):
+        #     out = layer(out)
+        #     if i in self.extract_layers:
+        #         # Resize feature maps if necessary to have H, W equal to DIM
+        #         if out.shape[-2:] != (DIM, DIM):
+        #             out = torch.nn.functional.interpolate(out, size=(DIM, DIM), mode='bilinear', align_corners=False)
+        #         feature_maps.append(out)
+        feature_maps = self.backbone(x)
         # Concatenate the extracted feature maps along the channel dimension.
-        unified = torch.cat(feature_maps, dim=1)
+        # unified = torch.cat(feature_maps, dim=1)
         
         # Reduce the channel dimension from 720 to 256 with a 1x1 convolution.
-        tokenized = self.tokenizer(unified)
+        tokenized = self.tokenizer(feature_maps)
         B, C, H, W = tokenized.shape
         
         # Reshape to (batch, sequence_length, embed_dim) where sequence_length = H * W
@@ -415,12 +418,32 @@ class TransformerAE(nn.Module):
         transformed = self.transformer(src, tgt)
         
         # Reshape transformer output back to spatial feature map (B, 256, H, W)
-        transformed = transformed.permute(0, 2, 1).reshape(B, 256, H, W)
+        transformed = transformed.permute(0, 2, 1).reshape(B, self.d_model, H, W)
         
         transformed = self.proj(transformed)  # -> (B, 720, DIM, DIM)
         
-        return transformed, unified
+        return transformed, feature_maps
     
+
+# class PositionalEncoding(nn.Module):
+#     def __init__(self, dim_model, dropout_p, max_len):
+#         super().__init__()
+#         self.dropout = nn.Dropout(dropout_p)
+        
+#         # Initialize with fixed sinusoidal values
+#         pos_encoding = torch.zeros(max_len, dim_model)
+#         positions_list = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+#         division_term = torch.exp(torch.arange(0, dim_model, 2, dtype=torch.float) * (-math.log(10000.0)) / dim_model)
+#         pos_encoding[:, 0::2] = torch.sin(positions_list * division_term)
+#         pos_encoding[:, 1::2] = torch.cos(positions_list * division_term)
+        
+#         # Make the positional encoding learnable by wrapping it as a parameter
+#         self.pos_encoding = nn.Parameter(pos_encoding.unsqueeze(0))  # shape (1, max_len, dim_model)
+        
+#     def forward(self, token_embedding: torch.tensor) -> torch.tensor:
+#         # token_embedding expected shape: (batch_size, sequence_length, dim_model)
+#         seq_len = token_embedding.size(1)
+#         return self.dropout(token_embedding + self.pos_encoding[:, :seq_len, :])
 
 class PositionalEncoding(nn.Module):
     def __init__(self, dim_model, dropout_p, max_len):
@@ -449,3 +472,31 @@ class PositionalEncoding(nn.Module):
     def forward(self, token_embedding: torch.tensor) -> torch.tensor:
         # Residual connection + pos encoding
         return self.dropout(token_embedding + self.pos_encoding[:token_embedding.size(0), :])
+    
+class Feature_extractor(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.model = resnet50(weights = ResNet50_Weights.IMAGENET1K_V2)                         
+        self.model.eval()
+        for param in self.model.parameters():
+            param.requires_grad = False
+
+        def hook(model, input, output):
+            self.features.append(output)
+        self.model.layer2[-1].register_forward_hook(hook)
+        self.model.layer3[-1].register_forward_hook(hook)
+
+    def forward(self, x):
+        self.features = []
+        
+        with torch.no_grad():
+            _ = self.model(x)
+        self.avg = nn.AvgPool2d(3, stride=1)
+        self.shape = self.features[0].shape[-2]
+        self.resize = nn.AdaptiveAvgPool2d(self.shape)
+
+        resized_patches = [self.resize(self.avg(f)) for f in self.features]
+        resized_patches = torch.cat(resized_patches, dim=1)
+        # patches = resized_patches.reshape(resized_patches.shape[1],  -1).T
+
+        return resized_patches
