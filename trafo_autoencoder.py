@@ -23,6 +23,8 @@ import os
 
 import math
 
+from transformers_custom import Transformer
+
 
 class TransAEManager():
     def __init__(self, product_class, config_path, train_path, test_path):
@@ -42,8 +44,8 @@ class TransAEManager():
 
         # Initialize model, loss function, and optimizer
         self.model = TransformerAE()
-        for param in self.model.backbone.parameters():
-            param.requires_grad = False
+        # for param in self.model.backbone.parameters():
+        #     param.requires_grad = False
 
         self.criterion = nn.MSELoss()
 
@@ -345,43 +347,131 @@ class EarlyStopping:
                     print("Stopping early as no improvement has been observed.")
 
 
+# class TransformerAE(nn.Module):
+#     def __init__(self):
+#         super().__init__()
+#         # Backbone: EfficientNet-B4 feature extractor with pretrained weights
+#         # weights = EfficientNet_B4_Weights.DEFAULT
+#         # self.backbone = efficientnet_b4(weights=weights)
+        
+#         # self.backbone = efficientnet_b4(weights=weights)
+#         self.backbone = Feature_extractor()
+#         nhead = 8
+#         patch_size = 32
+#         self.d_model = 512
+#         # Transformer encoder-decoder
+#         self.encoder_layer = torch.nn.TransformerEncoderLayer(
+#             d_model=self.d_model,
+#             nhead=nhead,
+#             batch_first=True
+#         )
+#         self.encoder = torch.nn.TransformerEncoder(
+#             self.encoder_layer,
+#             num_layers=4
+#         )
+#         self.decoder_layer = torch.nn.TransformerDecoderLayer(
+#             d_model=self.d_model,
+#             nhead=nhead,
+#             batch_first=True
+#         )
+#         self.decoder = torch.nn.TransformerDecoder(
+#             self.decoder_layer,
+#             num_layers=4
+#         )
+#         # Learned auxiliary query embedding for the decoder (sequence length = 16*16 = 256)
+#         # self.query_embed = nn.Parameter(torch.randn(patch_size * patch_size, self.d_model))
+        
+#         # Tokenization: 1x1 convolution to reduce the unified 720 channels to 256
+#         self.tokenizer = nn.Conv2d(1536, self.d_model, kernel_size=1)
+
+#         # positional encoding for the transformer
+#         self.positional_encoder = PositionalEncoding(
+#             dim_model=self.d_model, dropout_p=0.001, max_len=5000
+#         )
+        
+#         # Define the layer indices from which to extract features
+#         self.extract_layers = [1, 2, 3, 5, 7]
+
+#         # To map 256-dim transformer outputs back up to 720 channels
+#         self.proj = nn.Conv2d(self.d_model, 1536, kernel_size=1)
+        
+#     def forward(self, x):
+#         # Pass input through the backbone features sequentially and extract features from specified layers.
+#         _, _, _, DIM = x.shape
+#         DIM = 32
+#         feature_maps = []
+#         # out = x
+#         # for i, layer in enumerate(self.backbone.features):
+#         #     out = layer(out)
+#         #     if i in self.extract_layers:
+#         #         # Resize feature maps if necessary to have H, W equal to DIM
+#         #         if out.shape[-2:] != (DIM, DIM):
+#         #             out = torch.nn.functional.interpolate(out, size=(DIM, DIM), mode='bilinear', align_corners=False)
+#         #         feature_maps.append(out)
+#         feature_maps = self.backbone(x)
+#         # Concatenate the extracted feature maps along the channel dimension.
+#         # unified = torch.cat(feature_maps, dim=1)
+        
+#         # Reduce the channel dimension from 720 to 256 with a 1x1 convolution.
+#         tokenized = self.tokenizer(feature_maps)
+#         B, C, H, W = tokenized.shape
+        
+#         # Reshape to (batch, sequence_length, embed_dim) where sequence_length = H * W
+#         tokens = tokenized.reshape(B, C, H * W).permute(0, 2, 1)
+        
+#         # Prepare decoder queries: expand learned embedding for the current batch (B, sequence_length, 256)
+#         # queries = self.query_embed.unsqueeze(0).expand(B, -1, -1)
+#         # Embedding + positional encoding - Out size = (batch_size, sequence length, dim_model)
+#         src = tokens * math.sqrt(self.d_model)
+#         # tgt = queries * math.sqrt(self.d_model)
+#         src = self.positional_encoder(src)
+#         # tgt = self.positional_encoder(tgt)
+
+#         # Transformer encoder-decoder forward pass
+#         # transformed = self.transformer(src, tgt)
+#         encoded = self.encoder(src)
+#         transformed = self.decoder(encoded, encoded)
+        
+#         # Reshape transformer output back to spatial feature map (B, 256, H, W)
+#         transformed = transformed.permute(0, 2, 1).reshape(B, self.d_model, H, W)
+        
+#         transformed = self.proj(transformed)  # -> (B, 720, DIM, DIM)
+        
+#         return transformed, feature_maps
+
 class TransformerAE(nn.Module):
     def __init__(self):
         super().__init__()
         # Backbone: EfficientNet-B4 feature extractor with pretrained weights
         # weights = EfficientNet_B4_Weights.DEFAULT
         # self.backbone = efficientnet_b4(weights=weights)
-        
+
         # self.backbone = efficientnet_b4(weights=weights)
         self.backbone = Feature_extractor()
         nhead = 8
         patch_size = 32
         self.d_model = 512
         # Transformer encoder-decoder
-        self.transformer = torch.nn.Transformer(
+        self.transformer = Transformer(
             d_model=self.d_model,
-            nhead=nhead,
-            num_encoder_layers=4,
-            num_decoder_layers=4,
-            batch_first=True
+            num_heads=nhead,
+            num_layers=4,
+
+
         )
         # Learned auxiliary query embedding for the decoder (sequence length = 16*16 = 256)
         self.query_embed = nn.Parameter(torch.randn(patch_size * patch_size, self.d_model))
-        
+
         # Tokenization: 1x1 convolution to reduce the unified 720 channels to 256
         self.tokenizer = nn.Conv2d(1536, self.d_model, kernel_size=1)
 
-        # positional encoding for the transformer
-        self.positional_encoder = PositionalEncoding(
-            dim_model=self.d_model, dropout_p=0.001, max_len=5000
-        )
-        
+
         # Define the layer indices from which to extract features
         self.extract_layers = [1, 2, 3, 5, 7]
 
         # To map 256-dim transformer outputs back up to 720 channels
         self.proj = nn.Conv2d(self.d_model, 1536, kernel_size=1)
-        
+
     def forward(self, x):
         # Pass input through the backbone features sequentially and extract features from specified layers.
         _, _, _, DIM = x.shape
@@ -398,30 +488,29 @@ class TransformerAE(nn.Module):
         feature_maps = self.backbone(x)
         # Concatenate the extracted feature maps along the channel dimension.
         # unified = torch.cat(feature_maps, dim=1)
-        
+
         # Reduce the channel dimension from 720 to 256 with a 1x1 convolution.
         tokenized = self.tokenizer(feature_maps)
         B, C, H, W = tokenized.shape
-        
+
         # Reshape to (batch, sequence_length, embed_dim) where sequence_length = H * W
         tokens = tokenized.reshape(B, C, H * W).permute(0, 2, 1)
-        
+
         # Prepare decoder queries: expand learned embedding for the current batch (B, sequence_length, 256)
         queries = self.query_embed.unsqueeze(0).expand(B, -1, -1)
         # Embedding + positional encoding - Out size = (batch_size, sequence length, dim_model)
         src = tokens * math.sqrt(self.d_model)
         tgt = queries * math.sqrt(self.d_model)
-        src = self.positional_encoder(src)
-        tgt = self.positional_encoder(tgt)
+
 
         # Transformer encoder-decoder forward pass
         transformed = self.transformer(src, tgt)
-        
+
         # Reshape transformer output back to spatial feature map (B, 256, H, W)
         transformed = transformed.permute(0, 2, 1).reshape(B, self.d_model, H, W)
-        
+
         transformed = self.proj(transformed)  # -> (B, 720, DIM, DIM)
-        
+
         return transformed, feature_maps
     
 
@@ -445,33 +534,33 @@ class TransformerAE(nn.Module):
 #         seq_len = token_embedding.size(1)
 #         return self.dropout(token_embedding + self.pos_encoding[:, :seq_len, :])
 
-class PositionalEncoding(nn.Module):
-    def __init__(self, dim_model, dropout_p, max_len):
-        super().__init__()
-        # Modified version from: https://pytorch.org/tutorials/beginner/transformer_tutorial.html
-        # max_len determines how far the position can have an effect on a token (window)
+# class PositionalEncoding(nn.Module):
+#     def __init__(self, dim_model, dropout_p, max_len):
+#         super().__init__()
+#         # Modified version from: https://pytorch.org/tutorials/beginner/transformer_tutorial.html
+#         # max_len determines how far the position can have an effect on a token (window)
         
-        # Info
-        self.dropout = nn.Dropout(dropout_p)
+#         # Info
+#         self.dropout = nn.Dropout(dropout_p)
         
-        # Encoding - From formula
-        pos_encoding = torch.zeros(max_len, dim_model)
-        positions_list = torch.arange(0, max_len, dtype=torch.float).view(-1, 1) # 0, 1, 2, 3, 4, 5
-        division_term = torch.exp(torch.arange(0, dim_model, 2).float() * (-math.log(10000.0)) / dim_model) # 1000^(2i/dim_model)
+#         # Encoding - From formula
+#         pos_encoding = torch.zeros(max_len, dim_model)
+#         positions_list = torch.arange(0, max_len, dtype=torch.float).view(-1, 1) # 0, 1, 2, 3, 4, 5
+#         division_term = torch.exp(torch.arange(0, dim_model, 2).float() * (-math.log(10000.0)) / dim_model) # 1000^(2i/dim_model)
         
-        # PE(pos, 2i) = sin(pos/1000^(2i/dim_model))
-        pos_encoding[:, 0::2] = torch.sin(positions_list * division_term)
+#         # PE(pos, 2i) = sin(pos/1000^(2i/dim_model))
+#         pos_encoding[:, 0::2] = torch.sin(positions_list * division_term)
         
-        # PE(pos, 2i + 1) = cos(pos/1000^(2i/dim_model))
-        pos_encoding[:, 1::2] = torch.cos(positions_list * division_term)
+#         # PE(pos, 2i + 1) = cos(pos/1000^(2i/dim_model))
+#         pos_encoding[:, 1::2] = torch.cos(positions_list * division_term)
         
-        # Saving buffer (same as parameter without gradients needed)
-        pos_encoding = pos_encoding.unsqueeze(0).transpose(0, 1)
-        self.register_buffer("pos_encoding",pos_encoding)
+#         # Saving buffer (same as parameter without gradients needed)
+#         pos_encoding = pos_encoding.unsqueeze(0).transpose(0, 1)
+#         self.register_buffer("pos_encoding",pos_encoding)
         
-    def forward(self, token_embedding: torch.tensor) -> torch.tensor:
-        # Residual connection + pos encoding
-        return self.dropout(token_embedding + self.pos_encoding[:token_embedding.size(0), :])
+#     def forward(self, token_embedding: torch.tensor) -> torch.tensor:
+#         # Residual connection + pos encoding
+#         return self.dropout(token_embedding + self.pos_encoding[:token_embedding.size(0), :])
     
 class Feature_extractor(nn.Module):
     def __init__(self):

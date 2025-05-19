@@ -3,6 +3,8 @@ import yaml
 
 from base_autoencoder import BaseAEManager
 from trafo_autoencoder import TransAEManager
+from ViT import ViTManager
+
 def parse_arguments():
     """
     Parse command-line arguments for the anomaly detection script.
@@ -20,7 +22,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Anomaly Detection Script")
     parser.add_argument('--config',     type=str, default="config.yaml",    help="Path to the configuration file")
     parser.add_argument('--product_class',      type=str, default="hazelnut",       help="class name or 'all")
-    parser.add_argument('--model_name', type=str, default="trafo",           help="Name of the model to use")
+    parser.add_argument('--model_name', type=str, default="vit",           help="Name of the model to use")
     parser.add_argument('--train_path', type=str, default=None,             help="Path to the training output")
     parser.add_argument('--test_path',  type=str, default="/home/jaspinder/Github/Anomaly_Detection",             help="Path to the testing results")
     parser.add_argument('--mode',       type=str, default="train",          help="'train' or 'test'")
@@ -54,6 +56,16 @@ def main():
             model.save_model(args, mean_error, std_error, threshold)
         else:
             model.test()
+    elif args.model_name == "vit":
+        model = ViTManager(args.product_class, args.config, args.train_path, args.test_path)
+        if args.mode == "train":
+            model.train()
+            # mean_error, std_error, threshold = model.compute_thresh()
+            thres = model.thresholding()
+            model.save_model(args, thres)
+        else:
+            model.test()
+
     ### TODO can add more models here with elif
     else:
         raise ValueError(f"Model name '{args.model_name}' not defined.")
