@@ -2,13 +2,13 @@ import os
 import glob
 import torch
 import yaml
-import numpy                            as np
-from PIL                                import Image
-from pathlib                            import Path
-from torch.utils.data                   import Dataset
-from torchvision                        import transforms
-from torchvision.datasets.folder        import default_loader
-from torchvision.transforms.functional  import to_tensor
+import numpy as np
+from PIL import Image
+from pathlib import Path
+from torch.utils.data import Dataset
+from torchvision import transforms
+from torchvision.datasets.folder import default_loader
+from torchvision.transforms.functional import to_tensor
 
 
 # Load configuration from config.yaml
@@ -35,22 +35,18 @@ class MVTecAD2(Dataset):
         output_dir,
         transform=to_tensor,
     ):
-        
-        assert split in {
-            'train',
-            'test'
-        }, f'unknown split: {split}'
-    
-        assert (
-            mad2_object in (DATASET_OBJECTS+["all"])
-        ), f'unknown MVTec AD 2 object: {mad2_object}'
+
+        assert split in {"train", "test"}, f"unknown split: {split}"
+
+        assert mad2_object in (
+            DATASET_OBJECTS + ["all"]
+        ), f"unknown MVTec AD 2 object: {mad2_object}"
 
         self.output_dir = output_dir
         self.object = mad2_object
         self.split = split
         self.transform = transform
-        
-        
+
         self._image_base_dir = DATASET_PATH
         # get all images from the split
         if self.object == "all":
@@ -73,15 +69,15 @@ class MVTecAD2(Dataset):
     def _get_pattern(self, object_dir) -> list[str]:
         # Build two patterns: one for 'good', one for 'bad'
         patterns = [
-            os.path.join(object_dir, self.split, 'good', '**', '*.png'),
-            os.path.join(object_dir, self.split, 'bad', '**', '*.png'),
+            os.path.join(object_dir, self.split, "good", "**", "*.png"),
+            os.path.join(object_dir, self.split, "bad", "**", "*.png"),
         ]
         all_matches = []
         for pattern in patterns:
             matches = glob.glob(pattern, recursive=True)
             if not matches:
                 # Fallback to one level deep (no '**')
-                fallback_pattern = pattern.replace('**' + os.sep, '')
+                fallback_pattern = pattern.replace("**" + os.sep, "")
                 matches = glob.glob(fallback_pattern, recursive=True)
             all_matches.extend(matches)
         return all_matches
@@ -103,32 +99,33 @@ class MVTecAD2(Dataset):
         sample = default_loader(image_path)
         if self.transform is not None:
             sample = self.transform(sample)
-        if self.split == 'test':
+        if self.split == "test":
             return {
-                'sample': sample,
+                "sample": sample,
                 "ht": self.get_gt_image(idx),
-                'image_path': image_path,
-                'rel_out_path_cont': self.get_relative_anomaly_image_out_path(idx),
-                'rel_out_path_thresh': self.get_relative_anomaly_image_out_path(
+                "image_path": image_path,
+                "rel_out_path_cont": self.get_relative_anomaly_image_out_path(idx),
+                "rel_out_path_thresh": self.get_relative_anomaly_image_out_path(
                     idx, True
                 ),
             }
         else:
             return {
-                'sample': sample,
-                'image_path': image_path,
-                'rel_out_path_cont': self.get_relative_anomaly_image_out_path(idx),
-                'rel_out_path_thresh': self.get_relative_anomaly_image_out_path(
+                "sample": sample,
+                "image_path": image_path,
+                "rel_out_path_cont": self.get_relative_anomaly_image_out_path(idx),
+                "rel_out_path_thresh": self.get_relative_anomaly_image_out_path(
                     idx, True
                 ),
             }
+
     @property
     def image_paths(self):
         return self._image_paths
 
     @property
     def has_segmentation_gt(self) -> bool:
-        return self.split == 'test'
+        return self.split == "test"
 
     def get_relative_anomaly_image_out_path(self, idx, thresholded=False):
         """Returns a path relative to the experiment directory
@@ -145,13 +142,14 @@ class MVTecAD2(Dataset):
         relpath = image_path.relative_to(self._image_base_dir)
 
         if not thresholded:
-            base_dir = 'anomaly_images'
-            suffix = '.tiff'
+            base_dir = "anomaly_images"
+            suffix = ".tiff"
         else:
-            base_dir = 'anomaly_images_thresholded'
-            suffix = '.png'
+            base_dir = "anomaly_images_thresholded"
+            suffix = ".png"
 
         return os.path.join(self.output_dir, base_dir, relpath.with_suffix(suffix))
+
     def get_gt_image(self, idx):
         """Returns the ground truth image where values of 255 denote
         anomalous pixels and values of 0 anomaly-free ones. For good images,
@@ -166,12 +164,12 @@ class MVTecAD2(Dataset):
         image_path = self.image_paths[idx]
         if (
             self.has_segmentation_gt
-            and 'good' not in self.get_relative_anomaly_image_out_path(idx)
+            and "good" not in self.get_relative_anomaly_image_out_path(idx)
         ):
-            base_path, file_name = image_path.split('/bad/')
+            base_path, file_name = image_path.split("/bad/")
             gt_image_path = os.path.join(
-                base_path, 'ground_truth/bad', file_name
-            ).replace('.png', '_mask.png')
+                base_path, "ground_truth/bad", file_name
+            ).replace(".png", "_mask.png")
 
             gt_image_pil = Image.open(gt_image_path)
             gt_image = np.array(gt_image_pil)
@@ -187,7 +185,9 @@ class MVTecAD2(Dataset):
         if self.transform is not None:
             # Check if the transform contains Resize or CenterCrop
             for t in self.transform.transforms:
-                if isinstance(t, transforms.Resize) or isinstance(t, transforms.CenterCrop):
+                if isinstance(t, transforms.Resize) or isinstance(
+                    t, transforms.CenterCrop
+                ):
                     gt_tensor = t(gt_tensor)
 
         return gt_tensor

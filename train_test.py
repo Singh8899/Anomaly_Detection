@@ -5,6 +5,7 @@ from base_autoencoder import BaseAEManager
 from trafo_autoencoder import TransAEManager
 from ViT import ViTManager
 
+
 def parse_arguments():
     """
     Parse command-line arguments for the anomaly detection script.
@@ -20,14 +21,31 @@ def parse_arguments():
     """
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(description="Anomaly Detection Script")
-    parser.add_argument('--config',     type=str, default="config.yaml",    help="Path to the configuration file")
-    parser.add_argument('--product_class',      type=str, default="hazelnut",       help="class name or 'all")
-    parser.add_argument('--model_name', type=str, default="vit",           help="Name of the model to use")
-    parser.add_argument('--train_path', type=str, default=None,             help="Path to the training output")
-    parser.add_argument('--test_path',  type=str, default="/home/jaspinder/Github/Anomaly_Detection",             help="Path to the testing results")
-    parser.add_argument('--mode',       type=str, default="train",          help="'train' or 'test'")
-    
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="config.yaml",
+        help="Path to the configuration file",
+    )
+    parser.add_argument(
+        "--product_class", type=str, default="hazelnut", help="class name or 'all"
+    )
+    parser.add_argument(
+        "--model_name", type=str, default="vit", help="Name of the model to use"
+    )
+    parser.add_argument(
+        "--train_path", type=str, default=None, help="Path to the training output"
+    )
+    parser.add_argument(
+        "--test_path",
+        type=str,
+        default="/home/jaspinder/Github/Anomaly_Detection",
+        help="Path to the testing results",
+    )
+    parser.add_argument("--mode", type=str, default="train", help="'train' or 'test'")
+
     return parser.parse_args()
+
 
 def main():
     """Main function for anomaly detection."""
@@ -35,12 +53,16 @@ def main():
     if args.mode == "train" and not args.train_path:
         raise ValueError("Training mode requires --train_path to be specified.")
     elif args.mode == "test" and not args.test_path and not args.train_path:
-        raise ValueError("Testing mode requires --test_path and --train_path to be specified.")
+        raise ValueError(
+            "Testing mode requires --test_path and --train_path to be specified."
+        )
     elif args.mode not in ["train", "test"]:
         raise ValueError("Invalid mode. Please specify 'train' or 'test'.")
 
     if args.model_name == "base":
-        model = BaseAEManager(args.product_class, args.config, args.train_path, args.test_path)
+        model = BaseAEManager(
+            args.product_class, args.config, args.train_path, args.test_path
+        )
         if args.mode == "train":
             model.train()
             mean_error, std_error, threshold = model.compute_thresh()
@@ -49,7 +71,9 @@ def main():
             model.test()
 
     elif args.model_name == "trafo":
-        model = TransAEManager(args.product_class, args.config, args.train_path, args.test_path)
+        model = TransAEManager(
+            args.product_class, args.config, args.train_path, args.test_path
+        )
         if args.mode == "train":
             model.train()
             mean_error, std_error, threshold = model.compute_thresh()
@@ -57,7 +81,9 @@ def main():
         else:
             model.test()
     elif args.model_name == "vit":
-        model = ViTManager(args.product_class, args.config, args.train_path, args.test_path)
+        model = ViTManager(
+            args.product_class, args.config, args.train_path, args.test_path
+        )
         if args.mode == "train":
             model.train()
             # mean_error, std_error, threshold = model.compute_thresh()
@@ -69,6 +95,7 @@ def main():
     ### TODO can add more models here with elif
     else:
         raise ValueError(f"Model name '{args.model_name}' not defined.")
-    
+
+
 if __name__ == "__main__":
     main()
