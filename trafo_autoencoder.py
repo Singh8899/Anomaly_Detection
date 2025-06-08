@@ -1,22 +1,27 @@
 import os
 import yaml
 import numpy as np
-from PIL                        import Image
+from PIL import Image
 from torchinfo import summary
 import torch
 import torch.nn as nn
-from torch.utils.data           import DataLoader
-from torch.utils.tensorboard    import SummaryWriter
-from torchvision.models         import efficientnet_b4, EfficientNet_B4_Weights, resnet50, ResNet50_Weights
-from torch.optim.lr_scheduler   import CosineAnnealingLR
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
+from torchvision.models import (
+    efficientnet_b4,
+    EfficientNet_B4_Weights,
+    resnet50,
+    ResNet50_Weights,
+)
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
-from torchvision                import transforms
+from torchvision import transforms
 
-from matplotlib                 import pyplot as plt
+from matplotlib import pyplot as plt
 
-from tqdm                       import tqdm
+from tqdm import tqdm
 
-from dataset_preprocesser       import MVTecAD2
+from dataset_preprocesser import MVTecAD2
 
 from sklearn.metrics import roc_auc_score
 import os
@@ -26,7 +31,7 @@ import math
 from transformers_custom import Transformer
 
 
-class TransAEManager():
+class TransAEManager:
     def __init__(self, product_class, config_path, train_path, test_path):
         self.config_path = config_path
         self.train_path = train_path
@@ -36,8 +41,8 @@ class TransAEManager():
         # Load configuration from config.yaml
         with open(self.config_path, "r") as file:
             self.config = yaml.safe_load(file)
-        self.model_config = self.config['MODELS_CONFIG']
-        self.model_config = self.model_config['trafo_autoencoder']
+        self.model_config = self.config["MODELS_CONFIG"]
+        self.model_config = self.model_config["trafo_autoencoder"]
 
         # Set device
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -49,24 +54,26 @@ class TransAEManager():
 
         self.criterion = nn.MSELoss()
 
-        
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=float(self.model_config['learning_rate']))
+        self.optimizer = torch.optim.Adam(
+            self.model.parameters(), lr=float(self.model_config["learning_rate"])
+        )
 
-        self.transform = transforms.Compose([
-            transforms.Resize((256, 256)),
-            transforms.ToTensor()
-        ])
+        self.transform = transforms.Compose(
+            [transforms.Resize((256, 256)), transforms.ToTensor()]
+        )
         # Initialize cosine annealing learning rate scheduler
         self.scheduler = CosineAnnealingLR(
             self.optimizer,
             T_max=int(self.model_config.get("num_epochs")),
-            eta_min=float(self.model_config.get("min_lr"))
+            eta_min=float(self.model_config.get("min_lr")),
         )
         patience = int(self.model_config.get("patience"))
         delta = float(self.model_config.get("delta"))
-        self.early_stopping = EarlyStopping(patience=patience, delta=delta, verbose=False)
+        self.early_stopping = EarlyStopping(
+            patience=patience, delta=delta, verbose=False
+        )
 
-        print("learning_rate",float(self.model_config['learning_rate']))
+        print("learning_rate", float(self.model_config["learning_rate"]))
 
     def train(self):
         """
@@ -77,12 +84,12 @@ class TransAEManager():
         """
         log_dir = os.path.join(self.train_path)
         writer = SummaryWriter(log_dir=log_dir)
-        
+
         # Retrieve hyperparameters from configuration
-        batch_size          = int(self.model_config.get("batch_size"))
-        num_epochs          = int(self.model_config.get("num_epochs"))
-        validation_split    = float(self.model_config.get("validation_split"))
-        num_workers         = int(self.model_config.get("num_workers"))
+        batch_size = int(self.model_config.get("batch_size"))
+        num_epochs = int(self.model_config.get("num_epochs"))
+        validation_split = float(self.model_config.get("validation_split"))
+        num_workers = int(self.model_config.get("num_workers"))
         print(f"Batch size: {batch_size}")
         print(f"Number of epochs: {num_epochs}")
         print(f"Validation split: {validation_split}")
@@ -91,42 +98,50 @@ class TransAEManager():
         self.model.to(self.device)
 
         # Initialize the training dataset
-        self.train_dataset = MVTecAD2(self.product_class, "train", self.train_path, transform=self.transform)
-        
-        # Split the dataset into training and validation subsets
-        val_size    = int(validation_split * len(self.train_dataset))
-        train_size  = len(self.train_dataset) - val_size
-        train_subset, val_subset = torch.utils.data.random_split(self.train_dataset, [train_size, val_size])
-        print(f"Training on {len(train_subset)} samples, validating on {len(val_subset)} samples.")
-        
-        # Create DataLoaders for training and validation
-        self.train_loader = DataLoader(train_subset, 
-                                  batch_size=batch_size, 
-                                  shuffle=True,
-                                  num_workers=num_workers)
+        self.train_dataset = MVTecAD2(
+            self.product_class, "train", self.train_path, transform=self.transform
+        )
 
-        self.val_loader = DataLoader(val_subset, 
-                                batch_size=batch_size, 
-                                shuffle=False,
-                                num_workers=num_workers)
-        
+        # Split the dataset into training and validation subsets
+        val_size = int(validation_split * len(self.train_dataset))
+        train_size = len(self.train_dataset) - val_size
+        train_subset, val_subset = torch.utils.data.random_split(
+            self.train_dataset, [train_size, val_size]
+        )
+        print(
+            f"Training on {len(train_subset)} samples, validating on {len(val_subset)} samples."
+        )
+
+        # Create DataLoaders for training and validation
+        self.train_loader = DataLoader(
+            train_subset, batch_size=batch_size, shuffle=True, num_workers=num_workers
+        )
+
+        self.val_loader = DataLoader(
+            val_subset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+        )
+
         # Training and validation loop
         print("Starting training...")
         print(summary(self.model, input_size=(batch_size, 3, 256, 256)))
-        best_val = float('inf')
+        best_val = float("inf")
         best_epoch = 0
         for epoch in range(num_epochs):
             # Training phase: set model to training mode
             self.model.train()
-            
+
             epoch_loss = 0.0
-            for batch in tqdm(self.train_loader, desc=f"Epoch {epoch + 1}/{num_epochs} - Training", leave=False):
+            for batch in tqdm(
+                self.train_loader,
+                desc=f"Epoch {epoch + 1}/{num_epochs} - Training",
+                leave=False,
+            ):
                 # Transfer input images to the device
                 inputs = batch["sample"].to(self.device)
 
                 # Forward pass: compute reconstructed images
                 outputs, features = self.model(inputs)
-                
+
                 # Compute the training loss (mean squared error)
                 loss = self.criterion(outputs, features)
 
@@ -143,31 +158,39 @@ class TransAEManager():
 
             avg_train_loss = epoch_loss / len(self.train_loader)
             writer.add_scalar("Loss/Train", avg_train_loss, epoch + 1)
-                
+
             # Validation phase: set model to evaluation mode
             self.model.eval()
             val_loss = 0.0
             reconstruction_errors = []
             with torch.inference_mode():
-                for batch in tqdm(self.val_loader, desc=f"Epoch {epoch + 1}/{num_epochs} - Validation", leave=False):
+                for batch in tqdm(
+                    self.val_loader,
+                    desc=f"Epoch {epoch + 1}/{num_epochs} - Validation",
+                    leave=False,
+                ):
                     # Transfer validation images to the device
                     inputs = batch["sample"].to(self.device)
 
                     # Forward pass on validation data
                     outputs, features = self.model(inputs)
-                    
+
                     # Compute validation loss
                     loss = self.criterion(outputs, features)
-                    
+
                     # Compute the difference vector at each spatial location
                     diff = features - outputs  # shape (B, C, H, W)
-                    
+
                     # Calculate the pixel-level anomaly map by computing the L2 norm across channels (for each pixel)
-                    anomaly_map = torch.linalg.norm(diff, dim=1)  # shape (B, C, H, W) -> (B, H, W)
-                    
+                    anomaly_map = torch.linalg.norm(
+                        diff, dim=1
+                    )  # shape (B, C, H, W) -> (B, H, W)
+
                     # Pool the anomaly map of shape (B, 16, 16) to a single value per image using adaptive max pooling.
-                    img_anomaly_score = torch.nn.functional.adaptive_max_pool2d(anomaly_map, (1, 1)).reshape(anomaly_map.shape[0])
-                    
+                    img_anomaly_score = torch.nn.functional.adaptive_max_pool2d(
+                        anomaly_map, (1, 1)
+                    ).reshape(anomaly_map.shape[0])
+
                     reconstruction_errors.extend(img_anomaly_score.cpu().numpy())
 
                     # Accumulate validation loss for the epoch
@@ -177,17 +200,24 @@ class TransAEManager():
             mean_rec_error = torch.tensor(reconstruction_errors).mean().item()
             std_rec_error = torch.tensor(reconstruction_errors).std().item()
             print("==========================================")
-            print(f"Epoch: {epoch + 1}/{num_epochs} || Train | Loss: {avg_train_loss:>.6f} || Val | Loss: {avg_val_loss:>.6f} | MSE-Mean: {mean_rec_error:>.6f} | MSE-Std: {std_rec_error:>.6f}")
+            print(
+                f"Epoch: {epoch + 1}/{num_epochs} || Train | Loss: {avg_train_loss:>.6f} || Val | Loss: {avg_val_loss:>.6f} | MSE-Mean: {mean_rec_error:>.6f} | MSE-Std: {std_rec_error:>.6f}"
+            )
             writer.add_scalar("Loss/Validation", avg_val_loss, epoch + 1)
             writer.add_scalar("Reconstruction/Mean", mean_rec_error, epoch + 1)
             writer.add_scalar("Reconstruction/Std", std_rec_error, epoch + 1)
-            
+
             # Save the best epoch based on the lowest validation reconstruction mean error
             if mean_rec_error < best_val:
                 best_val = mean_rec_error
                 best_epoch = epoch + 1
-                torch.save(self.model.state_dict(), os.path.join(self.train_path, "autoencoder_weights.pth"))
-                print(f"Best model updated at Epoch {best_epoch} with MSE-Mean: {mean_rec_error:>.6f}")
+                torch.save(
+                    self.model.state_dict(),
+                    os.path.join(self.train_path, "autoencoder_weights.pth"),
+                )
+                print(
+                    f"Best model updated at Epoch {best_epoch} with MSE-Mean: {mean_rec_error:>.6f}"
+                )
 
             self.early_stopping.check_early_stop(mean_rec_error)
             if self.early_stopping.stop_training:
@@ -205,18 +235,24 @@ class TransAEManager():
         test_scores = []
         test_labels = []
 
-        self.test_dataset = MVTecAD2(self.product_class, "test", self.test_path, transform=self.transform)
+        self.test_dataset = MVTecAD2(
+            self.product_class, "test", self.test_path, transform=self.transform
+        )
         batch_size = int(self.model_config.get("batch_size"))
         num_workers = int(self.model_config.get("num_workers"))
-        test_loader = DataLoader(self.test_dataset, 
-                            batch_size=batch_size, 
-                            shuffle=True,
-                            num_workers=num_workers)
-        
+        test_loader = DataLoader(
+            self.test_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=num_workers,
+        )
+
         for el in test_loader:
             # Get the input image and move to device. Add a batch dimension.
             sample = el["sample"].to(self.device)
-            gt_anomaly = np.array(["bad" in path for path in el["image_path"]],dtype=int)
+            gt_anomaly = np.array(
+                ["bad" in path for path in el["image_path"]], dtype=int
+            )
 
             with torch.inference_mode():
                 # Forward pass: unsqueeze to add batch dimension
@@ -227,20 +263,26 @@ class TransAEManager():
                 stats = yaml.safe_load(file)
             threshold = float(stats["threshold"])
 
-    
             # Compute the difference vector at each spatial location
             diff = features - reconstructed  # shape (B, C, H, W)
-            
+
             # Calculate the pixel-level anomaly map by computing the L2 norm across channels (for each pixel)
-            anomaly_map = torch.linalg.norm(diff, dim=1)  # shape (B, C, H, W) -> (B, H, W)
-            
+            anomaly_map = torch.linalg.norm(
+                diff, dim=1
+            )  # shape (B, C, H, W) -> (B, H, W)
+
             # Pool the anomaly map of shape (B, 16, 16) to a single value per image using adaptive max pooling.
-            img_anomaly_score = torch.nn.functional.adaptive_max_pool2d(anomaly_map, (1, 1)).reshape(anomaly_map.shape[0]).cpu().numpy()
-            
+            img_anomaly_score = (
+                torch.nn.functional.adaptive_max_pool2d(anomaly_map, (1, 1))
+                .reshape(anomaly_map.shape[0])
+                .cpu()
+                .numpy()
+            )
+
             error_mask = (img_anomaly_score > threshold).astype(int)
 
             test_scores.extend(error_mask)
-            
+
             # Get ground truth label: 0 for normal, 1 for defective.
             test_labels.extend(gt_anomaly)
 
@@ -248,7 +290,9 @@ class TransAEManager():
         print(f"ROC AUC on test set: {roc_auc}")
 
         if roc_auc < 0.5:
-            print("ROC AUC is less than 0.5. The model might be worse than random. Consider redesigning the Autoencoder.")
+            print(
+                "ROC AUC is less than 0.5. The model might be worse than random. Consider redesigning the Autoencoder."
+            )
 
     def compute_thresh(self):
         # Set the autoencoder to evaluation mode
@@ -258,28 +302,31 @@ class TransAEManager():
         # Perform inference on the test dataset
         for el in tqdm(self.train_loader, desc="Processing train dataset"):
             # Get the input image and its path
-            sample      = el["sample"].to(self.device)
+            sample = el["sample"].to(self.device)
             # Perform forward pass to get the reconstructed image
             with torch.inference_mode():
                 reconstructed, features = self.model(sample)
 
             # Compute the difference vector at each spatial location
             diff = features - reconstructed  # shape (B, C, H, W)
-            
-            # Calculate the pixel-level anomaly map by computing the L2 norm across channels (for each pixel)
-            anomaly_map = torch.linalg.norm(diff, dim=1)  # shape (B, C, H, W) -> (B, H, W)
-            
-            # Pool the anomaly map of shape (B, 16, 16) to a single value per image using adaptive max pooling.
-            img_anomaly_score = torch.nn.functional.adaptive_max_pool2d(anomaly_map, (1, 1)).reshape(anomaly_map.shape[0])
 
-  
+            # Calculate the pixel-level anomaly map by computing the L2 norm across channels (for each pixel)
+            anomaly_map = torch.linalg.norm(
+                diff, dim=1
+            )  # shape (B, C, H, W) -> (B, H, W)
+
+            # Pool the anomaly map of shape (B, 16, 16) to a single value per image using adaptive max pooling.
+            img_anomaly_score = torch.nn.functional.adaptive_max_pool2d(
+                anomaly_map, (1, 1)
+            ).reshape(anomaly_map.shape[0])
+
             anomaly_scores.extend(img_anomaly_score.cpu().numpy())
 
         # Print the mean anomaly score
         print(f"Mean Anomaly Score: {np.mean(anomaly_scores)}")
         # Compute mean (μ) and standard deviation (σ) of anomaly scores
         mean_error = np.mean(anomaly_scores)
-        std_error  = np.std(anomaly_scores)
+        std_error = np.std(anomaly_scores)
 
         # Set threshold = μ + 3σ
         threshold = mean_error + 3 * std_error
@@ -288,12 +335,19 @@ class TransAEManager():
         print(f"Threshold: {threshold}")
 
         # Plot histogram of training errors
-        plt.hist(anomaly_scores, bins=30, density=True, alpha=0.7, color='blue', label='Training Errors')
-        plt.axvline(mean_error, color='green', linestyle='--', label='Mean (μ)')
-        plt.axvline(threshold, color='red', linestyle='--', label='Threshold (μ + 3σ)')
-        plt.title('Histogram of Training Errors')
-        plt.xlabel('Error')
-        plt.ylabel('Density')
+        plt.hist(
+            anomaly_scores,
+            bins=30,
+            density=True,
+            alpha=0.7,
+            color="blue",
+            label="Training Errors",
+        )
+        plt.axvline(mean_error, color="green", linestyle="--", label="Mean (μ)")
+        plt.axvline(threshold, color="red", linestyle="--", label="Threshold (μ + 3σ)")
+        plt.title("Histogram of Training Errors")
+        plt.xlabel("Error")
+        plt.ylabel("Density")
         plt.legend()
         save_path = os.path.join(self.train_path, "training_errors_histogram.png")
         plt.savefig(save_path)
@@ -319,12 +373,13 @@ class TransAEManager():
         stats_save_path = os.path.join(self.train_path, "training_statistics.yaml")
         with open(stats_save_path, "w") as file:
             stats = {
-            "mean_error": float(mean_error),
-            "std_error": float(std_error),
-            "threshold": float(threshold)
+                "mean_error": float(mean_error),
+                "std_error": float(std_error),
+                "threshold": float(threshold),
             }
             yaml.dump(stats, file)
         print(f"Training statistics saved to {stats_save_path}")
+
 
 class EarlyStopping:
     def __init__(self, patience=5, delta=0, verbose=False):
@@ -334,7 +389,7 @@ class EarlyStopping:
         self.best_loss = None
         self.no_improvement_count = 0
         self.stop_training = False
-    
+
     def check_early_stop(self, val_loss):
         if self.best_loss is None or val_loss < self.best_loss - self.delta:
             self.best_loss = val_loss
@@ -353,7 +408,7 @@ class EarlyStopping:
 #         # Backbone: EfficientNet-B4 feature extractor with pretrained weights
 #         # weights = EfficientNet_B4_Weights.DEFAULT
 #         # self.backbone = efficientnet_b4(weights=weights)
-        
+
 #         # self.backbone = efficientnet_b4(weights=weights)
 #         self.backbone = Feature_extractor()
 #         nhead = 8
@@ -380,7 +435,7 @@ class EarlyStopping:
 #         )
 #         # Learned auxiliary query embedding for the decoder (sequence length = 16*16 = 256)
 #         # self.query_embed = nn.Parameter(torch.randn(patch_size * patch_size, self.d_model))
-        
+
 #         # Tokenization: 1x1 convolution to reduce the unified 720 channels to 256
 #         self.tokenizer = nn.Conv2d(1536, self.d_model, kernel_size=1)
 
@@ -388,13 +443,13 @@ class EarlyStopping:
 #         self.positional_encoder = PositionalEncoding(
 #             dim_model=self.d_model, dropout_p=0.001, max_len=5000
 #         )
-        
+
 #         # Define the layer indices from which to extract features
 #         self.extract_layers = [1, 2, 3, 5, 7]
 
 #         # To map 256-dim transformer outputs back up to 720 channels
 #         self.proj = nn.Conv2d(self.d_model, 1536, kernel_size=1)
-        
+
 #     def forward(self, x):
 #         # Pass input through the backbone features sequentially and extract features from specified layers.
 #         _, _, _, DIM = x.shape
@@ -411,14 +466,14 @@ class EarlyStopping:
 #         feature_maps = self.backbone(x)
 #         # Concatenate the extracted feature maps along the channel dimension.
 #         # unified = torch.cat(feature_maps, dim=1)
-        
+
 #         # Reduce the channel dimension from 720 to 256 with a 1x1 convolution.
 #         tokenized = self.tokenizer(feature_maps)
 #         B, C, H, W = tokenized.shape
-        
+
 #         # Reshape to (batch, sequence_length, embed_dim) where sequence_length = H * W
 #         tokens = tokenized.reshape(B, C, H * W).permute(0, 2, 1)
-        
+
 #         # Prepare decoder queries: expand learned embedding for the current batch (B, sequence_length, 256)
 #         # queries = self.query_embed.unsqueeze(0).expand(B, -1, -1)
 #         # Embedding + positional encoding - Out size = (batch_size, sequence length, dim_model)
@@ -431,13 +486,14 @@ class EarlyStopping:
 #         # transformed = self.transformer(src, tgt)
 #         encoded = self.encoder(src)
 #         transformed = self.decoder(encoded, encoded)
-        
+
 #         # Reshape transformer output back to spatial feature map (B, 256, H, W)
 #         transformed = transformed.permute(0, 2, 1).reshape(B, self.d_model, H, W)
-        
+
 #         transformed = self.proj(transformed)  # -> (B, 720, DIM, DIM)
-        
+
 #         return transformed, feature_maps
+
 
 class TransformerAE(nn.Module):
     def __init__(self):
@@ -456,15 +512,14 @@ class TransformerAE(nn.Module):
             d_model=self.d_model,
             num_heads=nhead,
             num_layers=4,
-
-
         )
         # Learned auxiliary query embedding for the decoder (sequence length = 16*16 = 256)
-        self.query_embed = nn.Parameter(torch.randn(patch_size * patch_size, self.d_model))
+        self.query_embed = nn.Parameter(
+            torch.randn(patch_size * patch_size, self.d_model)
+        )
 
         # Tokenization: 1x1 convolution to reduce the unified 720 channels to 256
         self.tokenizer = nn.Conv2d(1536, self.d_model, kernel_size=1)
-
 
         # Define the layer indices from which to extract features
         self.extract_layers = [1, 2, 3, 5, 7]
@@ -502,7 +557,6 @@ class TransformerAE(nn.Module):
         src = tokens * math.sqrt(self.d_model)
         tgt = queries * math.sqrt(self.d_model)
 
-
         # Transformer encoder-decoder forward pass
         transformed = self.transformer(src, tgt)
 
@@ -512,23 +566,23 @@ class TransformerAE(nn.Module):
         transformed = self.proj(transformed)  # -> (B, 720, DIM, DIM)
 
         return transformed, feature_maps
-    
+
 
 # class PositionalEncoding(nn.Module):
 #     def __init__(self, dim_model, dropout_p, max_len):
 #         super().__init__()
 #         self.dropout = nn.Dropout(dropout_p)
-        
+
 #         # Initialize with fixed sinusoidal values
 #         pos_encoding = torch.zeros(max_len, dim_model)
 #         positions_list = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
 #         division_term = torch.exp(torch.arange(0, dim_model, 2, dtype=torch.float) * (-math.log(10000.0)) / dim_model)
 #         pos_encoding[:, 0::2] = torch.sin(positions_list * division_term)
 #         pos_encoding[:, 1::2] = torch.cos(positions_list * division_term)
-        
+
 #         # Make the positional encoding learnable by wrapping it as a parameter
 #         self.pos_encoding = nn.Parameter(pos_encoding.unsqueeze(0))  # shape (1, max_len, dim_model)
-        
+
 #     def forward(self, token_embedding: torch.tensor) -> torch.tensor:
 #         # token_embedding expected shape: (batch_size, sequence_length, dim_model)
 #         seq_len = token_embedding.size(1)
@@ -539,45 +593,47 @@ class TransformerAE(nn.Module):
 #         super().__init__()
 #         # Modified version from: https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 #         # max_len determines how far the position can have an effect on a token (window)
-        
+
 #         # Info
 #         self.dropout = nn.Dropout(dropout_p)
-        
+
 #         # Encoding - From formula
 #         pos_encoding = torch.zeros(max_len, dim_model)
 #         positions_list = torch.arange(0, max_len, dtype=torch.float).view(-1, 1) # 0, 1, 2, 3, 4, 5
 #         division_term = torch.exp(torch.arange(0, dim_model, 2).float() * (-math.log(10000.0)) / dim_model) # 1000^(2i/dim_model)
-        
+
 #         # PE(pos, 2i) = sin(pos/1000^(2i/dim_model))
 #         pos_encoding[:, 0::2] = torch.sin(positions_list * division_term)
-        
+
 #         # PE(pos, 2i + 1) = cos(pos/1000^(2i/dim_model))
 #         pos_encoding[:, 1::2] = torch.cos(positions_list * division_term)
-        
+
 #         # Saving buffer (same as parameter without gradients needed)
 #         pos_encoding = pos_encoding.unsqueeze(0).transpose(0, 1)
 #         self.register_buffer("pos_encoding",pos_encoding)
-        
+
 #     def forward(self, token_embedding: torch.tensor) -> torch.tensor:
 #         # Residual connection + pos encoding
 #         return self.dropout(token_embedding + self.pos_encoding[:token_embedding.size(0), :])
-    
+
+
 class Feature_extractor(nn.Module):
     def __init__(self):
         super().__init__()
-        self.model = resnet50(weights = ResNet50_Weights.IMAGENET1K_V2)                         
+        self.model = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
         self.model.eval()
         for param in self.model.parameters():
             param.requires_grad = False
 
         def hook(model, input, output):
             self.features.append(output)
+
         self.model.layer2[-1].register_forward_hook(hook)
         self.model.layer3[-1].register_forward_hook(hook)
 
     def forward(self, x):
         self.features = []
-        
+
         with torch.no_grad():
             _ = self.model(x)
         self.avg = nn.AvgPool2d(3, stride=1)
