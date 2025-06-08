@@ -1,4 +1,5 @@
-DATASET_PATH: "/home/jaspinder/.cache/kagglehub/datasets/mvtec-ad"
+DATASET_PATH: "/Users/callo/Library/CloudStorage/OneDrive-AlmaMaterStudiorumUniversitàdiBologna/UniBo/Year_2/Semester_1/Artificial_Intelligence_in_Industry/Project/datasets/mvtec-ad"
+
 DATASET_OBJECTS:
   - bottle
   - cable
@@ -56,7 +57,9 @@ MODELS_CONFIG:
     batch_size: 32
     num_epochs: 20
     
-  sksksarlo_demo:
+  DeepFeatureAE:
     batch_size: 64
-    num_epochs: 15
+    num_epochs: 20
+    validation_split: 0.1
+    learning_rate: 1e-3
 
