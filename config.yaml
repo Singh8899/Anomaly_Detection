@@ -1,4 +1,5 @@
-DATASET_PATH: "/Users/callo/Library/CloudStorage/OneDrive-AlmaMaterStudiorumUniversitàdiBologna/UniBo/Year_2/Semester_1/Artificial_Intelligence_in_Industry/Project/datasets/mvtec-ad"
+DATASET_PATH: "/home/jaspinder/.cache/kagglehub/datasets/mvtec-ad"
+#DATASET_PATH: "/Users/callo/Library/CloudStorage/OneDrive-AlmaMaterStudiorumUniversitàdiBologna/UniBo/Year_2/Semester_1/Artificial_Intelligence_in_Industry/Project/datasets/mvtec-ad"
 
 DATASET_OBJECTS:
   - bottle
