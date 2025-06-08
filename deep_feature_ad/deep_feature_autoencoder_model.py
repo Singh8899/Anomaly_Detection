@@ -237,8 +237,18 @@ class DeepFeatureAutoEncoder(nn.Module):
         # Feature extractor to get intermediate features
         self.feature_extractor = FeatureExtractor(layer_hooks=layer_hooks, smooth=smooth)
         
+        # Calculate the in_channels for autoencoder based on layer_hooks used
+        layer_channels = {
+            'layer1': 256,
+            'layer2': 512, 
+            'layer3': 1024,
+            'layer4': 2048
+        }
+        in_channels = sum(layer_channels[layer] for layer in layer_hooks)
+        # in_channels = 512 + 1024 = 1536 if using layer2 and layer3 features
+        
         # Autoencoder for feature reconstruction
-        self.autoencoder = AE(in_channels=1536, latent_dim=latent_dim, is_bn=is_bn)
+        self.autoencoder = AE(in_channels=in_channels, latent_dim=latent_dim, is_bn=is_bn)
         
     def forward(self, x):
         """
