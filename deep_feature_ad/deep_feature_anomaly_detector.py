@@ -1,7 +1,8 @@
+"""@author: Carlo Merola"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from deep_feature_ad.deep_feature_autoencoder_model import DeepFeatureAutoEncoder
+from deep_feature_autoencoder_model import DeepFeatureAutoEncoder
 
 
 class DeepFeatureAnomalyDetector(nn.Module):
@@ -10,8 +11,8 @@ class DeepFeatureAnomalyDetector(nn.Module):
     Computes reconstruction error from deep features and generates anomaly scores.
     Computes segmentation maps for visualizing anomalies.
     """
-    
-    def __init__(self, layer_hooks=['layer2', 'layer3'], latent_dim=100, smooth = True, is_bn=True):
+
+    def __init__(self, layer_hooks=['layer2', 'layer3'], latent_dim=100, smooth=True, is_bn=True):
         """
         Initialize the anomaly detector with specified layer hooks and other parameters.
         """
@@ -27,17 +28,25 @@ class DeepFeatureAnomalyDetector(nn.Module):
         self.threshold = None  # Threshold for anomaly detection, to be set later
         self.error_map = None  # Placeholder for the error map
         
+    def forward(self, x):
+        """
+        Forward pass through the autoencoder.
+        Returns the features and reconstructed output.
+        """
+        features, reconstructed = self.autoencoder(x)
+        return features, reconstructed
+        
     def set_threshold(self, threshold):
         self.threshold = threshold
-        
-    def compute_reconstruction_error(self,x):
+
+    def compute_reconstruction_error(self, features, reconstructed):
         """
         Compute the reconstruction error for the input features.
         Outputs an error map that indicates the per-pixel reconstruction error.
         """
-        features, reconstructed = self.autoencoder(x)
         error_map = torch.norm(features - reconstructed, p=2, dim=1)
         self.error_map = error_map  # Store the error map for later use
+        return error_map
 
     def get_reconstruction_error(self):
         """
@@ -47,13 +56,15 @@ class DeepFeatureAnomalyDetector(nn.Module):
             raise ValueError("Reconstruction error has not been computed yet.")
         return self.error_map
     
-    def compute_anomaly_score(self, k=10):
+    def compute_anomaly_score(self, error_map, k=10):
         """
         Compute anomaly score as average of top-k errors.
         """
-        if self.error_map is None:
-            raise ValueError("Reconstruction error has not been computed yet.")
-        error_map = self.error_map  # [B, H, W]
+        if error_map is None:
+            if self.error_map is not None:
+                error_map = self.error_map
+            else:
+                raise ValueError("Reconstruction error has not been computed yet.")
         
         batch_size, height, width = error_map.shape
         anomaly_scores = []

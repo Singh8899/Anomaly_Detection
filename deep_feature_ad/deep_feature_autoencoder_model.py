@@ -46,46 +46,46 @@ class FeatureExtractor(nn.Module):
         self.smooth = smooth
         self.smoothing_layer = nn.AvgPool2d(kernel_size=3, stride=1, padding=1) if self.smooth else None
         
-        def forward(self, x):
-            """
-            Extract and align features from ResNet50 backbone.
-            
-            Args:
-                x: Input tensor [B, 3, 224, 224]
-            Returns:
-                merged_features
-            """
-            
-            self.collected_features = []    # to reset at each forward pass
-            
-            # activate hooks
-            with torch.no_grad():
-                _ = self.backbone(x)
-            
-            # exrtract features from the collected list
-            first_layer_features = self.collected_features[0]
-            second_layer_features = self.collected_features[1]
-            
-            # define target size of concatenation with the bigger spatial resolution
-            target_size = first_layer_features.shape[-2:] # [28, 28] for layer2
-            
-            # TODO: try with transposed convolutions
-            second_layer_resized = F.interpolate(
-                second_layer_features, 
-                size=target_size, 
-                mode='bilinear', 
-            )
+    def forward(self, x):
+        """
+        Extract and align features from ResNet50 backbone.
         
-            if self.smooth:
-                # apply smoothing to both feature maps (using interpolated features for second layer)
-                first_layer_smooth = self.smoothing_layer(first_layer_features)
-                second_layer_smooth = self.smoothing_layer(second_layer_resized)
-                
-            # concatenate features along channel dimension
-            merged_features = torch.cat([first_layer_smooth, second_layer_smooth], dim=1)
-            # [B, 1536, 28, 28] = [512, 28, 28] + [1024, 28, 28] if layer2 and layer3 are used
+        Args:
+            x: Input tensor [B, 3, 224, 224]
+        Returns:
+            merged_features
+        """
+        
+        self.collected_features = []    # to reset at each forward pass
+        
+        # activate hooks
+        with torch.no_grad():
+            _ = self.backbone(x)
+        
+        # exrtract features from the collected list
+        first_layer_features = self.collected_features[0]
+        second_layer_features = self.collected_features[1]
+        
+        # define target size of concatenation with the bigger spatial resolution
+        target_size = first_layer_features.shape[-2:] # [28, 28] for layer2
+        
+        # TODO: try with transposed convolutions
+        second_layer_resized = F.interpolate(
+            second_layer_features, 
+            size=target_size, 
+            mode='bilinear', 
+        )
+    
+        if self.smooth:
+            # apply smoothing to both feature maps (using interpolated features for second layer)
+            first_layer_smooth = self.smoothing_layer(first_layer_features)
+            second_layer_smooth = self.smoothing_layer(second_layer_resized)
             
-            return merged_features
+        # concatenate features along channel dimension
+        merged_features = torch.cat([first_layer_smooth, second_layer_smooth], dim=1)
+        # [B, 1536, 28, 28] = [512, 28, 28] + [1024, 28, 28] if layer2 and layer3 are used
+        
+        return merged_features
         
 
 
@@ -163,11 +163,11 @@ class DecoderLayer(nn.Module):
             self.bn = None
         self.relu = nn.ReLU(inplace=True)
         
-        def forward(self, x):
-            x = self.conv(x)
-            x = x if self.bn is None else self.bn(x)
-            x = self.relu(x)
-            return x
+    def forward(self, x):
+        x = self.conv(x)
+        x = x if self.bn is None else self.bn(x)
+        x = self.relu(x)
+        return x
     
 class Decoder(nn.Module):
     """
@@ -181,17 +181,17 @@ class Decoder(nn.Module):
         # 100 → 200 → 818 → 1536 (smooth dimensionality expansion)
         
         # First expansion: 100 → 200 channels (2 * latent_dim)
-        self.layer1 = DecoderLayer(in_channels, 2 * latent_dim, kernel_size=1, stride=1, padding=0, is_bn=is_bn)
+        self.layer1 = DecoderLayer(latent_dim, 2 * latent_dim, kernel_size=1, stride=1, padding=0, is_bn=is_bn)
         # Second expansion: 200 → 818 channels
         self.layer2 = DecoderLayer(2 * latent_dim, (in_channels + 2 * latent_dim) // 2, kernel_size=1, stride=1, padding=0, is_bn=is_bn)
         # Final expansion: 818 → 1536 channels (reconstruct original feature size)
         self.layer3 = DecoderLayer((in_channels + 2 * latent_dim) // 2, in_channels, kernel_size=1, stride=1, padding=0, is_bn=is_bn)
         
-        def forward(self, x):
-            x = self.layer1(x)
-            x = self.layer2(x)
-            x = self.layer3(x)
-            return x
+    def forward(self, x):
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        return x
 
 class AE(nn.Module):
     """
