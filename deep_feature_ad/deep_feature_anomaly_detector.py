@@ -84,15 +84,19 @@ class DeepFeatureAnomalyDetector(nn.Module):
         # get one tensor for all anomaly scores
         return torch.stack(anomaly_scores)
     
-    def get_segmentation_map(self, target_size=(224, 224)):
+    def get_segmentation_map(self, error_map, target_size=(224, 224)):
         """
         Generate segmentation map by upsampling error map to input image size.
         """
-        if self.error_map is None:
-            raise ValueError("Reconstruction error has not been computed yet.")
+        if error_map is None:
+            if self.error_map is not None:
+                error_map = self.error_map
+            else:
+                raise ValueError("Reconstruction error has not been computed yet.")
+            
         # Upsample error map to target size
-        upsampled = F.interpolate(self.error_map.unsqueeze(1), size=target_size, mode='bilinear')
-        
+        upsampled = F.interpolate(error_map.unsqueeze(1), size=target_size, mode='bilinear')
+
         # Create a 3-channel segmentation map
         seg_map = upsampled.squeeze(1)
         return seg_map

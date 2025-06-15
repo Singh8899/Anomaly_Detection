@@ -88,6 +88,11 @@ class DeepFeatureADManager:
             
         # Threshold for anomaly detection
         self.thresholds = None
+        self.sigma_multiplier = None
+        self.mean_error = None
+        self.std_error = None
+        self.error_map = None
+        self.anomaly_scores = None
         
     def compute_threshold(self):
         """
@@ -97,13 +102,13 @@ class DeepFeatureADManager:
         """
         mode = self.threshold_computation_mode
         if mode == "standard":
-            sigma_multiplier = 3.0
+            self.sigma_multiplier = 3.0
         elif mode == "aggressive":
-            sigma_multiplier = 1.0
+            self.sigma_multiplier = 1.0
         elif mode == "conservative":
-            sigma_multiplier = 5.0
+            self.sigma_multiplier = 5.0
         elif mode == "all":
-            sigma_multiplier = [3.0, 1.0, 5.0]
+            self.sigma_multiplier = [3.0, 1.0, 5.0]
         else:
             raise ValueError(f"Invalid threshold computation mode: {mode}. Must be 'standard', 'aggressive', 'conservative', or 'all'")
         
@@ -129,20 +134,20 @@ class DeepFeatureADManager:
                 anomaly_scores.extend(scores.cpu().numpy()) # Collect anomaly scores and move to CPU
 
         # compute statistics for anomaly scores and set the threshold
-        anomaly_scores = np.array(anomaly_scores)
-        mean_error = np.mean(anomaly_scores)
-        std_error = np.std(anomaly_scores)
-        print(f"Mean Anomaly Score: {mean_error}, Std Anomaly Score: {std_error}")
-        
+        self.anomaly_scores = np.array(anomaly_scores)
+        self.mean_error = np.mean(self.anomaly_scores)
+        self.std_error = np.std(self.anomaly_scores)
+        print(f"Mean Anomaly Score: {self.mean_error}, Std Anomaly Score: {self.std_error}")
+
         # if sigma_multiplier is a list, compute thresholds for each multiplier
-        if isinstance(sigma_multiplier, list):
+        if isinstance(self.sigma_multiplier, list):
             # If multiple sigma multipliers are provided, compute thresholds for each
-            thresholds = [mean_error + m * std_error for m in sigma_multiplier]
+            thresholds = [self.mean_error + m * self.std_error for m in self.sigma_multiplier]
             print(f"Computed thresholds: {thresholds}")
         else:
             # Single sigma multiplier
-            thresholds = mean_error + sigma_multiplier * std_error
-            print(f"Computed threshold: {mean_error + sigma_multiplier * std_error}")
+            thresholds = self.mean_error + self.sigma_multiplier * self.std_error
+            print(f"Computed threshold: {self.mean_error + self.sigma_multiplier * self.std_error}")
             
         self.thresholds = thresholds
     
@@ -152,6 +157,16 @@ class DeepFeatureADManager:
         """
         threshold_file = os.path.join(self.train_path, f"{self.product_class}_thresholds.yaml")
         
+        # Save threshold info
+        threshold_info = {
+            'mode': self.threshold_computation_mode,
+            'sigma_multiplier': self.sigma_multiplier,
+            'mean_error': float(self.mean_error),
+            'std_error': float(self.std_error),
+            'thresholds': None,
+            'num_samples': len(self.anomaly_scores)
+        }
+        
         # Convert NumPy types to Python native types for YAML serialization
         if isinstance(self.thresholds, list):
             # Convert each np.float32 to Python float
@@ -160,13 +175,120 @@ class DeepFeatureADManager:
             # Single threshold case
             thresholds = float(self.thresholds)
         
+        # Update the threshold info with the computed thresholds converted to native types
+        threshold_info['thresholds'] = thresholds
+        
         with open(threshold_file, 'w') as file:
-            yaml.safe_dump({'thresholds': thresholds}, file)
+            yaml.safe_dump({'thresholds': threshold_info}, file)
         
         print(f"Thresholds saved to: {threshold_file}")
-            
-            
-            
+        
+        
+    def plot_anomalies_thresholds(self):
+        """
+        Plot the computed thresholds.
+        """
+        if not isinstance(self.thresholds, list):
+            self.thresholds = [self.thresholds]
+        if not isinstance(self.sigma_multiplier, list):
+            self.sigma_multiplier = [self.sigma_multiplier]
+        
+        # getting subplots for each threshold. Number of subplots is equal to the number of thresholds
+        fig, axes = plt.subplots(nrows=len(self.thresholds), ncols=1, figsize=(10, 6 * len(self.thresholds)))
+        
+        for i, threshold in enumerate(self.thresholds):
+            ax = axes[i]
+            ax.hist(self.anomaly_scores, bins=50, density=True, alpha=0.7, color='blue', label='Training Errors')
+            ax.axvline(self.mean_error, color='green', linestyle='--', label=f'Mean (μ): {self.mean_error:.4f}')
+            ax.axvline(threshold, color='red', linestyle='--', label=f'Threshold (μ + {self.sigma_multiplier[i]}σ): {threshold:.4f}')
+            ax.set_title(f'Histogram of Training Reconstruction Errors ({self.threshold_computation_mode.upper()} Mode)')
+            ax.set_xlabel('Reconstruction Error')
+            ax.set_ylabel('Density')
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+
+        save_path = os.path.join(self.train_path, f"training_errors_histogram_{self.threshold_computation_mode}.png")
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        print(f"Histogram saved to: {save_path}")
+        
+    
+    def generate_segmentation_maps(self, num_examples=5):
+        """
+        Generate a segmentation map for the given image using the trained model.
+        """
+        self.model.eval()
+        seg_output_dir = os.path.join(self.test_path, "segmentation_maps")
+        os.makedirs(seg_output_dir, exist_ok=True)
+        
+        test_loader = DataLoader(self.test_dataset, batch_size=1, shuffle=False)
+        
+        with torch.no_grad():
+            for i, batch in enumerate(test_loader):
+                if i >= num_examples:
+                    break
+                
+                images = batch["sample"].to(self.device)
+                #image_name = batch["name"][0]
+                image_path = batch["image_path"][0]
+                
+                # only anomalous images are used for segmentation maps
+                if 'good' in image_path:
+                    continue
+        
+                # Forward pass through the autoencoder
+                features, reconstructed = self.model(images)
+                
+                # Compute error map
+                error_map = self.model.compute_reconstruction_error(features, reconstructed)
+                seg_map = self.model.get_segmentation_map(error_map=error_map, target_size=(self.model_config['input_size'], self.model_config['input_size']))
+                anomaly_scores = self.model.compute_anomaly_score(error_map, k=10)
+
+                thresholds = self.thresholds if isinstance(self.thresholds, list) else [self.thresholds]
+                
+                original_image = images[0].cpu().numpy().transpose(1, 2, 0)
+                
+                # denormalize the image
+                original_image = (original_image * np.array([0.229, 0.224, 0.225]) + np.array([0.485, 0.456, 0.406]))
+                original_image = np.clip(original_image, 0, 1)  # Ensure pixel values are in [0, 1]
+                
+                seg_map = seg_map[0].cpu().numpy()  
+                error_map = error_map[0].cpu().numpy()
+                
+                # save maps
+                fig, axes = plt.subplots(2, 3, figsize=(15, 5))
+                
+                axes[0, 0].imshow(original_image)
+                axes[0, 0].set_title("Original Image")
+                axes[0, 0].axis('off')
+                
+                axes[0, 1].imshow(seg_map, cmap='jet')
+                axes[0, 1].set_title("Segmentation Map")
+                axes[0, 1].axis('off')
+                
+                axes[0, 2].imshow(original_image)
+                axes[0, 2].imshow(seg_map, cmap='jet', alpha=0.5)
+                axes[0, 2].set_title("Overlay Segmentation Map")
+                axes[0, 2].axis('off')
+                
+                for j, threshold in enumerate(thresholds):
+                    axes[1, j].imshow(original_image)
+                    axes[1, j].imshow(seg_map>threshold, cmap='gray')
+                    axes[1, j].set_title(f"Mask. Threshold: {threshold:.4f}")
+                    axes[1, j].axis('off')
+
+                plt.tight_layout()
+
+                # save figures
+                fig.savefig(os.path.join(seg_output_dir, f"segmentation_map_{i}.png"))
+                plt.close(fig)
+                
+                print(f"Segmentation map saved for image {i+1} at {os.path.join(seg_output_dir, f'segmentation_map_{i}.png')}")
+                
+                
+
 if __name__ == "__main__":
     product_class = "hazelnut"  # Example product class
 
@@ -194,3 +316,5 @@ if __name__ == "__main__":
     # Compute and save thresholds
     manager.compute_threshold()
     manager.save_thresholds_for_class()
+    manager.plot_anomalies_thresholds()
+    manager.generate_segmentation_maps(num_examples=5)
