@@ -28,9 +28,9 @@ os.chdir(original_cwd)  # Change back to original working directory
 class DeepFeatureADManager:
     """
     Manager for Deep Feature-based Anomaly Detection.
-    Handles computation of threshold based on data std, training, validation, and evaluation of the model.
+    Handles computation of threshold based on data std, computation of statistics based on anomaly scores, and generation of segmentation maps. 
     """
-    def __init__(self, product_class, config_path, train_path, test_path, threshold_computation_mode='all'):
+    def __init__(self, product_class, config_path, train_path, test_path, threshold_computation_mode='all', model=None):
         """
         threshold_computation_mode: options: standard 3sigma, aggressive 1sigma, conservative 5sigma, all
         all: computes all three thresholds and saves them in the model config
@@ -53,8 +53,18 @@ class DeepFeatureADManager:
         print(f"USING DEVICE: {self.device}")
         
         # Initialize model and move to device
-        self.model = DeepFeatureAnomalyDetector(layer_hooks=['layer2', 'layer3'], latent_dim=100, smooth=True, is_bn=True)
-        
+        if model is not None:
+            # If a pre-trained model is provided, use it
+            self.model = model
+            print("Using provided pre-trained model.")
+            
+        else:
+            self.model = DeepFeatureAnomalyDetector(layer_hooks=self.model_config['layer_hooks'], 
+                                                    latent_dim=self.model_config['latent_dim'], 
+                                                    smooth=self.model_config['smooth'], 
+                                                    is_bn=self.model_config['is_bn']
+                                                )
+
         self.model.to(self.device)
         
         # Loss function and optimizer
@@ -94,6 +104,16 @@ class DeepFeatureADManager:
         self.error_map = None
         self.anomaly_scores = None
         
+    def load_model_weights(self, weight_path):
+        """
+        Load model weights from the specified path.
+        """
+        if weight_path:
+            self.model.load_state_dict(torch.load(weight_path, map_location=self.device))
+            print(f"Model weights loaded from {weight_path}")
+        else:
+            print("No model weights provided. Using untrained model.")
+        
     def compute_threshold(self):
         """
         Compute the anomaly detection threshold based on the training data and reconstruction error/anomaly scores.
@@ -111,7 +131,6 @@ class DeepFeatureADManager:
             self.sigma_multiplier = [3.0, 1.0, 5.0]
         else:
             raise ValueError(f"Invalid threshold computation mode: {mode}. Must be 'standard', 'aggressive', 'conservative', or 'all'")
-        
         
         self.model.eval()
         train_loader = DataLoader(self.train_dataset, batch_size=self.model_config['batch_size'], shuffle=False)
@@ -150,7 +169,9 @@ class DeepFeatureADManager:
             print(f"Computed threshold: {self.mean_error + self.sigma_multiplier * self.std_error}")
             
         self.thresholds = thresholds
-    
+
+        # return self.thresholds
+
     def save_thresholds_for_class(self):
         """
         Save computed thresholds to a YAML file for the specific product class.
@@ -183,7 +204,21 @@ class DeepFeatureADManager:
         
         print(f"Thresholds saved to: {threshold_file}")
         
+    def load_thresholds_for_class(self, threshold_file=None):
+        """
+        Load thresholds from a YAML file for the specific product class.
+        """
+        with open(threshold_file, 'r') as file:
+            threshold_info = yaml.safe_load(file)['thresholds']
         
+        self.threshold_computation_mode = threshold_info['mode']
+        self.sigma_multiplier = threshold_info['sigma_multiplier']
+        self.mean_error = threshold_info['mean_error']
+        self.std_error = threshold_info['std_error']
+        self.thresholds = threshold_info['thresholds']
+        
+        print(f"Loaded thresholds: {self.thresholds}")
+
     def plot_anomalies_thresholds(self):
         """
         Plot the computed thresholds.
@@ -258,7 +293,7 @@ class DeepFeatureADManager:
                 error_map = error_map[0].cpu().numpy()
                 
                 # save maps
-                fig, axes = plt.subplots(2, 3, figsize=(15, 5))
+                fig, axes = plt.subplots(2, 3, figsize=(15, 8))
                 
                 axes[0, 0].imshow(original_image)
                 axes[0, 0].set_title("Original Image")
@@ -273,13 +308,14 @@ class DeepFeatureADManager:
                 axes[0, 2].set_title("Overlay Segmentation Map")
                 axes[0, 2].axis('off')
                 
+                # save mask for each threshold
                 for j, threshold in enumerate(thresholds):
                     axes[1, j].imshow(original_image)
                     axes[1, j].imshow(seg_map>threshold, cmap='gray')
-                    axes[1, j].set_title(f"Mask. Threshold: {threshold:.4f}")
+                    axes[1, j].set_title(f"Mask - Threshold: {threshold:.4f}")
                     axes[1, j].axis('off')
 
-                plt.tight_layout()
+                fig.tight_layout()
 
                 # save figures
                 fig.savefig(os.path.join(seg_output_dir, f"segmentation_map_{i}.png"))

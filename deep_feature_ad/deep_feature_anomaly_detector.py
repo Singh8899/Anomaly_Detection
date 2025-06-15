@@ -112,3 +112,10 @@ class DeepFeatureAnomalyDetector(nn.Module):
             return predictions, scores
         else:
             return None, scores  # If no threshold is set, return only scores
+        
+    
+    def get_stats(self):
+        """
+        Get statistics of the model, including layer hooks and latent dimension.
+        """
+        return self.autoencoder.get_stats()

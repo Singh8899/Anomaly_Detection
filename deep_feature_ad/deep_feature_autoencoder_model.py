@@ -249,6 +249,21 @@ class DeepFeatureAutoEncoder(nn.Module):
         
         # Autoencoder for feature reconstruction
         self.autoencoder = AE(in_channels=in_channels, latent_dim=latent_dim, is_bn=is_bn)
+    
+    def get_stats(self):
+        """
+        Get statistics of the model.
+        
+        Returns:
+            dict: Dictionary containing model statistics.
+        """
+        stats = {
+            'num_layers': len(list(self.modules())),
+            'backbone_params': sum(p.numel() for p in self.feature_extractor.backbone.parameters()),
+            'autoencoder_params': sum(p.numel() for p in self.autoencoder.parameters()),
+            'trainable_params': sum(p.numel() for p in self.parameters() if p.requires_grad)
+        }
+        return stats
         
     def forward(self, x):
         """
