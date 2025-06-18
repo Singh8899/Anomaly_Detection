@@ -28,7 +28,7 @@ os.chdir(original_cwd)  # Change back to original working directory
 class DeepFeatureADManager:
     """
     Manager for Deep Feature-based Anomaly Detection.
-    Handles computation of threshold based on data std, computation of statistics based on anomaly scores, and generation of segmentation maps. 
+    Handles computation of threshold based on data (product) std, computation of statistics based on anomaly scores, and generation of segmentation maps. 
     """
     def __init__(self, product_class, config_path, train_path, test_path, threshold_computation_mode='all', model=None):
         """
@@ -172,11 +172,16 @@ class DeepFeatureADManager:
 
         # return self.thresholds
 
-    def save_thresholds_for_class(self):
+    def save_thresholds_for_class(self, foundational=False):
         """
         Save computed thresholds to a YAML file for the specific product class.
         """
-        threshold_file = os.path.join(self.train_path, f"{self.product_class}_thresholds.yaml")
+        if foundational:
+            # If foundational, save in a different path
+            threshold_file = os.path.join(self.train_path, f"{self.product_class}_foundational_thresholds.yaml")
+        else:
+            # Save in the regular train path
+            threshold_file = os.path.join(self.train_path, f"{self.product_class}_thresholds.yaml")
         
         # Save threshold info
         threshold_info = {
@@ -250,12 +255,14 @@ class DeepFeatureADManager:
         print(f"Histogram saved to: {save_path}")
         
     
-    def generate_segmentation_maps(self, num_examples=5):
+    def generate_segmentation_maps(self, num_examples=5, foundational=False):
         """
         Generate a segmentation map for the given image using the trained model.
         """
         self.model.eval()
         seg_output_dir = os.path.join(self.test_path, "segmentation_maps")
+        if foundational:
+            seg_output_dir = os.path.join(seg_output_dir, self.product_class)
         os.makedirs(seg_output_dir, exist_ok=True)
         
         test_loader = DataLoader(self.test_dataset, batch_size=1, shuffle=False)
