@@ -1,47 +1,32 @@
 import os
-import yaml
+
 import numpy as np
-from PIL import Image
-from torchinfo import summary
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+import torchvision.utils as utils
+import yaml
+from einops import rearrange
+from matplotlib import pyplot as plt
+from PIL import Image
+from sklearn.metrics import (auc, precision_recall_curve, roc_auc_score,
+                             roc_curve)
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from torchvision.models import (
-    efficientnet_b4,
-    EfficientNet_B4_Weights,
-    resnet50,
-    ResNet50_Weights,
-)
-from torch.optim.lr_scheduler import CosineAnnealingLR
-import torchvision.utils as utils
+from torchinfo import summary
 from torchvision import transforms
-
-from matplotlib import pyplot as plt
-
+from torchvision.models import (EfficientNet_B4_Weights, ResNet50_Weights,
+                                efficientnet_b4, resnet50)
 from tqdm import tqdm
 
-from dataset_preprocesser import MVTecAD2
-
-from sklearn.metrics import roc_auc_score
-import os
-
-import math
-from student_transformer import ViT
-
-import model_res18 as M
-from einops import rearrange
-import spatial as S
-import mdn1
+import vit_model.mdn1 as mdn1
+import vit_model.model_res18 as M
 import pytorch_ssim
-
-from utility_fun import *
-
-from sklearn.metrics import roc_auc_score
-from sklearn.metrics import roc_curve, auc
-from sklearn.metrics import precision_recall_curve
-
-import torch.nn.functional as F
+import vit_model.spatial as S
+from dataset_preprocesser import MVTecAD2
+from vit_model.student_transformer import ViT
+from vit_model.utility_fun import *
 
 
 class ViTManager:

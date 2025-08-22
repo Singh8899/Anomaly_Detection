@@ -1,9 +1,8 @@
 import argparse
-import yaml
 
-from base_autoencoder import BaseAEManager
-from trafo_autoencoder import TransAEManager
-from ViT import ViTManager
+from base_model.base_autoencoder import BaseAEManager
+from trafo_mode1l.trafo_autoencoder import TransAEManager
+from vit_model.ViT import ViTManager
 
 
 def parse_arguments():
@@ -28,18 +27,21 @@ def parse_arguments():
         help="Path to the configuration file",
     )
     parser.add_argument(
-        "--product_class", type=str, default="hazelnut", help="class name or 'all"
+        "--product_class", type=str, default="hazelnut", help="class name or 'all'"
     )
     parser.add_argument(
         "--model_name", type=str, default="vit", help="Name of the model to use"
     )
     parser.add_argument(
-        "--train_path", type=str, default=None, help="Path to the training output"
+        "--train_path", 
+        type=str,
+        default="trains",
+        help="Path to the training output"
     )
     parser.add_argument(
         "--test_path",
         type=str,
-        default="/home/jaspinder/Github/Anomaly_Detection",
+        default="tests",
         help="Path to the testing results",
     )
     parser.add_argument("--mode", type=str, default="train", help="'train' or 'test'")

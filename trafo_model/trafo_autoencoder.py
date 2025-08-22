@@ -28,7 +28,7 @@ import os
 
 import math
 
-from transformers_custom import Transformer
+from trafo_model.transformers_custom import Transformer
 
 
 class TransAEManager:
