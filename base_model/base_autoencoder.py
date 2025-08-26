@@ -183,14 +183,14 @@ class BaseAEManager:
         )
         batch_size = int(self.model_config.get("batch_size"))
         num_workers = int(self.model_config.get("num_workers"))
-        train_loader = DataLoader(
+        test_loader = DataLoader(
             self.test_dataset,
             batch_size=batch_size,
             shuffle=True,
             num_workers=num_workers,
         )
 
-        for el in train_loader:
+        for el in test_loader:
             # Get the input image and move to device. Add a batch dimension.
             sample = el["sample"].to(self.device)
             gt_anomaly = np.array(

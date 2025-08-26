@@ -1,7 +1,8 @@
 import argparse
 
+from trafo_model.trafo_autoencoder import TransAEManager
+
 from base_model.base_autoencoder import BaseAEManager
-from trafo_mode1l.trafo_autoencoder import TransAEManager
 from vit_model.ViT import ViTManager
 
 

@@ -7,10 +7,9 @@ Created on Mon Aug 24 13:14:10 2020
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torchvision.models as models
 from torch.autograd import Variable
-import torch.nn.functional as F
-
 
 ## Decoder ##
 

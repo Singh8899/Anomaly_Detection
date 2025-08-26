@@ -7,7 +7,6 @@ import torch.nn.functional as F
 import torchvision.utils as utils
 import yaml
 from einops import rearrange
-from matplotlib import pyplot as plt
 from PIL import Image
 from sklearn.metrics import (auc, precision_recall_curve, roc_auc_score,
                              roc_curve)
@@ -16,13 +15,12 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torchinfo import summary
 from torchvision import transforms
-from torchvision.models import (EfficientNet_B4_Weights, ResNet50_Weights,
-                                efficientnet_b4, resnet50)
 from tqdm import tqdm
 
 import vit_model.mdn1 as mdn1
+from vit_model.mdn1 import add_noise
 import vit_model.model_res18 as M
-import pytorch_ssim
+import vit_model.pytorch_ssim as pytorch_ssim
 import vit_model.spatial as S
 from dataset_preprocesser import MVTecAD2
 from vit_model.student_transformer import ViT
@@ -286,63 +284,6 @@ class ViTManager:
 
         writer.close()
         print("Training completed.")
-
-    # def test(self):
-    # vit_weights_path = os.path.join(self.train_path, "vit_weights.pth")
-    # g_weights_path = os.path.join(self.train_path, "g_weights.pth")
-
-    # self.model_test = VT_AE(train=False).cuda()
-    # self.model_test.load_state_dict(torch.load(vit_weights_path, map_location=self.device))
-    # self.model_test.eval()
-
-    # self.G_estimate_test = mdn1.MDN(train=False).cuda()
-    # self.G_estimate.load_state_dict(torch.load(g_weights_path, map_location=self.device))
-    # self.G_estimate.eval()
-
-    #     test_scores = []
-    #     test_labels = []
-
-    # batch_size = int(self.model_config.get("batch_size"))
-    # num_workers = int(self.model_config.get("num_workers"))
-    # test_loader = DataLoader(self.test_dataset,
-    #                     batch_size=1,
-    #                     shuffle=True,
-    #                     num_workers=num_workers)
-
-    # for el in test_loader:
-    #     # Get the input image and move to device. Add a batch dimension.
-    #     sample = el["sample"].to(self.device)
-    #     gt_anomaly = np.array(["bad" in path for path in el["image_path"]],dtype=int)
-
-    #         with torch.inference_mode():
-    #             reconstructed, features = self.model(sample)
-    #         # Compute reconstruction error (MSE)
-    #         stats_path = os.path.join(self.train_path, "training_statistics.yaml")
-    #         with open(stats_path, "r") as file:
-    #             stats = yaml.safe_load(file)
-    #         threshold = float(stats["threshold"])
-
-    #         # Compute the difference vector at each spatial location
-    #         diff = features - reconstructed  # shape (B, C, H, W)
-
-    #         # Calculate the pixel-level anomaly map by computing the L2 norm across channels (for each pixel)
-    #         anomaly_map = torch.linalg.norm(diff, dim=1)  # shape (B, C, H, W) -> (B, H, W)
-
-    #         # Pool the anomaly map of shape (B, 16, 16) to a single value per image using adaptive max pooling.
-    #         img_anomaly_score = torch.nn.functional.adaptive_max_pool2d(anomaly_map, (1, 1)).reshape(anomaly_map.shape[0]).cpu().numpy()
-
-    #         error_mask = (img_anomaly_score > threshold).astype(int)
-
-    #         test_scores.extend(error_mask)
-
-    #         # Get ground truth label: 0 for normal, 1 for defective.
-    #         test_labels.extend(gt_anomaly)
-
-    #     roc_auc = roc_auc_score(test_labels, test_scores)
-    #     print(f"ROC AUC on test set: {roc_auc}")
-
-    #     if roc_auc < 0.5:
-    #         print("ROC AUC is less than 0.5. The model might be worse than random. Consider redesigning the Autoencoder.")
 
     def test(self, upsample=1):
 
@@ -719,33 +660,3 @@ def initialize_weights(*models):
                 module.weight.data.fill_(1)
                 module.bias.data.zero_()
 
-
-##### Adding Noise ############
-
-
-def add_noise(latent, noise_type="gaussian", sd=0.2):
-    """Here we add noise to the latent features concatenated from the 4 autoencoders.
-    Arguements:
-    'gaussian' (string): Gaussian-distributed additive noise.
-    'speckle' (string) : Multiplicative noise using out = image + n*image, where n is uniform noise with specified mean & variance.
-    'sd' (integer) : standard deviation used for geenrating noise
-
-    Input :
-        latent : numpy array or cuda tensor.
-
-    Output:
-        Array: Noise added input, can be np array or cuda tnesor.
-    """
-    assert sd >= 0.0
-    if noise_type == "gaussian":
-        mean = 0.0
-
-        n = torch.distributions.Normal(torch.tensor([mean]), torch.tensor([sd]))
-        noise = n.sample(latent.size()).squeeze(-1).cuda()
-        latent = latent + noise
-        return latent
-
-    if noise_type == "speckle":
-        noise = torch.randn(latent.size()).cuda()
-        latent = latent + latent * noise
-        return latent
