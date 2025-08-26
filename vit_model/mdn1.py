@@ -6,11 +6,10 @@ Refrence: https://github.com/moonl1ght/MDN/blob/master/MDN.ipynb
 for the no of parameters - sum(p.numel() for p in model.parameters() if p.requires_grad)
 """
 
-import torch
 import numpy as np
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 
 COEFS = 10
 IN_DIM = 512

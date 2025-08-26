@@ -5,13 +5,12 @@ import torch
 import torch.nn as nn
 
 from tqdm import tqdm
-from PIL import Image
 from matplotlib import pyplot as plt
 from pathlib import Path
 
 from sklearn.metrics import roc_auc_score
 from torchvision import transforms
-from torchvision.models import resnet50, ResNet50_Weights
+from torchvision.models import resnet50
 
 from dataset_preprocesser import MVTecAD2
 class Feature_extractor(nn.Module):

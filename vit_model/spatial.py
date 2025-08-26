@@ -6,8 +6,8 @@ Created on Thu Oct 15 15:40:29 2020
 """
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
 import torch.nn.functional as F
+from torch.autograd import Variable
 
 
 class Unity(nn.Module):

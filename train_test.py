@@ -1,8 +1,8 @@
 import argparse
 
-from trafo_model.trafo_autoencoder import TransAEManager
-
 from base_model.base_autoencoder import BaseAEManager
+from patchcore.patchcore_class import PatchCoreManager
+from trafo_model.trafo_autoencoder import TransAEManager
 from vit_model.ViT import ViTManager
 
 
@@ -31,7 +31,7 @@ def parse_arguments():
         "--product_class", type=str, default="hazelnut", help="class name or 'all'"
     )
     parser.add_argument(
-        "--model_name", type=str, default="vit", help="Name of the model to use"
+        "--model_name", type=str, default="vit", help="Name of the model to use (base, trafo, vit, patchcore)"
     )
     parser.add_argument(
         "--train_path", 
@@ -92,6 +92,16 @@ def main():
             # mean_error, std_error, threshold = model.compute_thresh()
             thres = model.thresholding()
             model.save_model(args, thres)
+        else:
+            model.test()
+    elif args.model_name == "patchcore":
+        model = PatchCoreManager(
+            args.product_class, args.config, args.train_path, args.test_path
+        )
+        if args.mode == "train":
+            model.train()
+            mean_error, std_error, threshold = model.compute_thresh()
+            model.save_model(args, mean_error, std_error, threshold)
         else:
             model.test()
 

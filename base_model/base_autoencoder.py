@@ -1,23 +1,18 @@
 import os
-import yaml
-import numpy as np
-from PIL import Image
 
+import numpy as np
 import torch
 import torch.nn as nn
+import yaml
+from matplotlib import pyplot as plt
+from PIL import Image
+from sklearn.metrics import roc_auc_score
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-
 from torchvision import transforms
-
-from matplotlib import pyplot as plt
-
 from tqdm import tqdm
 
 from dataset_preprocesser import MVTecAD2
-
-from sklearn.metrics import roc_auc_score
-import os
 
 
 class BaseAEManager:

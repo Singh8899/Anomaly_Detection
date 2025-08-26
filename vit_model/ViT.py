@@ -18,11 +18,11 @@ from torchvision import transforms
 from tqdm import tqdm
 
 import vit_model.mdn1 as mdn1
-from vit_model.mdn1 import add_noise
 import vit_model.model_res18 as M
 import vit_model.pytorch_ssim as pytorch_ssim
 import vit_model.spatial as S
 from dataset_preprocesser import MVTecAD2
+from vit_model.mdn1 import add_noise
 from vit_model.student_transformer import ViT
 from vit_model.utility_fun import *
 

@@ -1,33 +1,23 @@
+import math
 import os
-import yaml
+
 import numpy as np
-from PIL import Image
-from torchinfo import summary
 import torch
 import torch.nn as nn
+import yaml
+from matplotlib import pyplot as plt
+from PIL import Image
+from sklearn.metrics import roc_auc_score
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from torchvision.models import (
-    efficientnet_b4,
-    EfficientNet_B4_Weights,
-    resnet50,
-    ResNet50_Weights,
-)
-from torch.optim.lr_scheduler import CosineAnnealingLR
-
+from torchinfo import summary
 from torchvision import transforms
-
-from matplotlib import pyplot as plt
-
+from torchvision.models import (EfficientNet_B4_Weights, ResNet50_Weights,
+                                efficientnet_b4, resnet50)
 from tqdm import tqdm
 
 from dataset_preprocesser import MVTecAD2
-
-from sklearn.metrics import roc_auc_score
-import os
-
-import math
-
 from trafo_model.transformers_custom import Transformer
 
 
