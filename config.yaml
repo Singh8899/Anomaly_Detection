@@ -61,10 +61,6 @@ MODELS_CONFIG:
     min_lr: 1e-5
     patience : 10
     delta : 1e-3
-
-  ottthmane_demo:
-    batch_size: 32
-    num_epochs: 20
     
   DeepFeatureAE:
     batch_size: 64
@@ -78,3 +74,9 @@ MODELS_CONFIG:
     latent_dim: 100
     is_bn: True
     threshold_computation_mode: 'all'
+  patchcore:
+    batch_size: 1  # PatchCore processes one image at a time
+    memory_bank_subsample_ratio: 0.1  # Use 10% of patches for efficiency
+    threshold_multiplier: 2.0  # Threshold = mean + 2*std
+    num_neighbors: 9  # For k-NN distance calculation
+

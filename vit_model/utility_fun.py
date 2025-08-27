@@ -4,14 +4,13 @@ Created on Mon May 24 17:19:16 2021
 
 @author: pankaj.mishra
 """
-from scipy.ndimage import gaussian_filter, median_filter
-import torch
-import numpy as np
-import matplotlib.pyplot as plt
 import cv2
-from skimage.measure import label
-
 import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+from scipy.ndimage import gaussian_filter, median_filter
+from skimage.measure import label
 
 matplotlib.use("TkAgg")  # Or 'Qt5Agg', depending on what you installed
 

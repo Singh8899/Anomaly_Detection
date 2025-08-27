@@ -6,11 +6,10 @@ Refrence: https://github.com/moonl1ght/MDN/blob/master/MDN.ipynb
 for the no of parameters - sum(p.numel() for p in model.parameters() if p.requires_grad)
 """
 
-import torch
 import numpy as np
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 
 COEFS = 10
 IN_DIM = 512
@@ -122,7 +121,7 @@ def add_noise(latent, noise_type="gaussian", sd=0.2):
     Arguements:
     'gaussian' (string): Gaussian-distributed additive noise.
     'speckle' (string) : Multiplicative noise using out = image + n*image, where n is uniform noise with specified mean & variance.
-    'sd' (float) : standard deviation used for generating noise
+    'sd' (integer) : standard deviation used for geenrating noise
 
     Input :
         latent : numpy array or cuda tensor.
@@ -135,7 +134,7 @@ def add_noise(latent, noise_type="gaussian", sd=0.2):
         mean = 0.0
 
         n = torch.distributions.Normal(torch.tensor([mean]), torch.tensor([sd]))
-        noise = n.sample(latent.size()).squeeze(2).cuda()
+        noise = n.sample(latent.size()).squeeze(-1).cuda()
         latent = latent + noise
         return latent
 
@@ -143,3 +142,5 @@ def add_noise(latent, noise_type="gaussian", sd=0.2):
         noise = torch.randn(latent.size()).cuda()
         latent = latent + latent * noise
         return latent
+
+

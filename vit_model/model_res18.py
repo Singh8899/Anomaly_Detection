@@ -1,59 +1,51 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Oct 15 15:40:29 2020
+Created on Mon Aug 24 13:14:10 2020
 
 @author: Pankaj Mishra
 """
+
 import torch
 import torch.nn as nn
-from torch.autograd import Variable
 import torch.nn.functional as F
+import torchvision.models as models
+from torch.autograd import Variable
+
+## Decoder ##
 
 
-class Unity(nn.Module):
-    def __init__(self, ks, in_ch=512):
-        super(Unity, self).__init__()
-
-        self.conv = nn.Conv2d(in_channels=in_ch, out_channels=512, kernel_size=ks)
-
-    def forward(self, x):
-        return F.relu(self.conv(x), inplace=True)
-
-
-class Spatial_Scorer(nn.Module):
-    def __init__(self, in_dim=512, test=False):
-        super(Spatial_Scorer, self).__init__()
-        self.test = test
-
-        self.layers = nn.Sequential(
-            nn.Linear(in_dim, 256),
+class decoder2(nn.Module):
+    def __init__(self, in_channels):
+        super(decoder2, self).__init__()
+        self.decoder2 = nn.Sequential(
+            nn.ConvTranspose2d(
+                in_channels=in_channels,
+                out_channels=16,
+                kernel_size=3,
+                stride=2,
+                padding=1,
+            ),  # In b, 8, 8, 8 >> out b, 16, 15, 15
+            nn.BatchNorm2d(16, affine=True),
             nn.ReLU(True),
-            nn.Linear(256, 128),
+            nn.ConvTranspose2d(16, 32, 9, stride=3, padding=1),  # out> b,32, 49, 49
+            nn.BatchNorm2d(32, affine=True),
             nn.ReLU(True),
-            nn.Linear(128, 1),
+            nn.ConvTranspose2d(32, 32, 7, stride=5, padding=1),  # out> b, 32, 245, 245
+            nn.BatchNorm2d(32, affine=True),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(32, 16, 9, stride=2),  # out> b, 16, 497, 497
+            nn.BatchNorm2d(16, affine=True),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(16, 8, 6, stride=1),  # out> b, 8, 502, 502
+            nn.BatchNorm2d(8, affine=True),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(8, 3, 11, stride=1),  # out> b, 3, 512, 512
             nn.Tanh(),
         )
-        if not self.test:
-            print("Initializing Spatial socrer network.........")
-            initialize_weights(self.layers)
 
     def forward(self, x):
-        x = x.view(x.size(0), -1)
-        F = self.layers(x)
-        return F
-
-
-# Initialize weight function
-def initialize_weights(*models):
-    for model in models:
-        for module in model.modules():
-            if isinstance(module, nn.Conv2d) or isinstance(module, nn.Linear):
-                nn.init.kaiming_normal_(module.weight)
-                if module.bias is not None:
-                    module.bias.data.zero_()
-            elif isinstance(module, nn.BatchNorm2d):
-                module.weight.data.fill_(1)
-                module.bias.data.zero_()
+        recon = self.decoder2(x)
+        return recon
 
 
 class DigitCaps(nn.Module):
@@ -75,8 +67,6 @@ class DigitCaps(nn.Module):
         self.W = nn.Parameter(
             0.01 * torch.randn(out_num_caps, in_num_caps, out_dim_caps, in_dim_caps)
         )
-
-    #        self.upsample = upsampling()
 
     def forward(self, x):
         # x size: batch x 1152 x 8
@@ -123,12 +113,3 @@ class DigitCaps(nn.Module):
         #        t = self.upsample(t)
 
         return t, outputs
-
-    def squash(self, input_tensor):
-        squared_norm = (input_tensor**2).sum(-1, keepdim=True)
-        output_tensor = (
-            squared_norm
-            * input_tensor
-            / ((1.0 + squared_norm) * torch.sqrt(squared_norm))
-        )
-        return output_tensor

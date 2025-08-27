@@ -1,9 +1,9 @@
 import argparse
-import yaml
 
-from base_autoencoder import BaseAEManager
-from trafo_autoencoder import TransAEManager
-from ViT import ViTManager
+from base_model.base_autoencoder import BaseAEManager
+from patchcore.patchcore_class import PatchCoreManager
+from trafo_model.trafo_autoencoder import TransAEManager
+from vit_model.ViT import ViTManager
 
 
 def parse_arguments():
@@ -28,18 +28,21 @@ def parse_arguments():
         help="Path to the configuration file",
     )
     parser.add_argument(
-        "--product_class", type=str, default="hazelnut", help="class name or 'all"
+        "--product_class", type=str, default="hazelnut", help="class name or 'all'"
     )
     parser.add_argument(
-        "--model_name", type=str, default="vit", help="Name of the model to use"
+        "--model_name", type=str, default="vit", help="Name of the model to use (base, trafo, vit, patchcore)"
     )
     parser.add_argument(
-        "--train_path", type=str, default=None, help="Path to the training output"
+        "--train_path", 
+        type=str,
+        default="trains",
+        help="Path to the training output"
     )
     parser.add_argument(
         "--test_path",
         type=str,
-        default="/home/jaspinder/Github/Anomaly_Detection",
+        default="tests",
         help="Path to the testing results",
     )
     parser.add_argument("--mode", type=str, default="train", help="'train' or 'test'")
@@ -89,6 +92,16 @@ def main():
             # mean_error, std_error, threshold = model.compute_thresh()
             thres = model.thresholding()
             model.save_model(args, thres)
+        else:
+            model.test()
+    elif args.model_name == "patchcore":
+        model = PatchCoreManager(
+            args.product_class, args.config, args.train_path, args.test_path
+        )
+        if args.mode == "train":
+            model.train()
+            mean_error, std_error, threshold = model.compute_thresh()
+            model.save_model(args, mean_error, std_error, threshold)
         else:
             model.test()
 

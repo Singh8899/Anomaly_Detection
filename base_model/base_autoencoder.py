@@ -1,23 +1,18 @@
 import os
-import yaml
-import numpy as np
-from PIL import Image
 
+import numpy as np
 import torch
 import torch.nn as nn
+import yaml
+from matplotlib import pyplot as plt
+from PIL import Image
+from sklearn.metrics import roc_auc_score
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-
 from torchvision import transforms
-
-from matplotlib import pyplot as plt
-
 from tqdm import tqdm
 
 from dataset_preprocesser import MVTecAD2
-
-from sklearn.metrics import roc_auc_score
-import os
 
 
 class BaseAEManager:
@@ -183,14 +178,14 @@ class BaseAEManager:
         )
         batch_size = int(self.model_config.get("batch_size"))
         num_workers = int(self.model_config.get("num_workers"))
-        train_loader = DataLoader(
+        test_loader = DataLoader(
             self.test_dataset,
             batch_size=batch_size,
             shuffle=True,
             num_workers=num_workers,
         )
 
-        for el in train_loader:
+        for el in test_loader:
             # Get the input image and move to device. Add a batch dimension.
             sample = el["sample"].to(self.device)
             gt_anomaly = np.array(

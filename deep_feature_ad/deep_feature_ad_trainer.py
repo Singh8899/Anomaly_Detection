@@ -15,6 +15,12 @@ from torch.utils.data import DataLoader
 
 from deep_feature_ad_manager import DeepFeatureADManager
 from deep_feature_anomaly_detector import DeepFeatureAnomalyDetector
+from sklearn.metrics import (classification_report, confusion_matrix,
+                             precision_recall_curve, roc_auc_score)
+from torch import nn
+from torch.utils.data import DataLoader
+from torchvision import transforms
+from tqdm import tqdm
 
 # changing parent directory to import MVTecAD2 dataset
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -22,6 +28,7 @@ sys.path.append(parent_dir)
 original_cwd = os.getcwd()
 os.chdir(parent_dir)  # Change to parent directory to import MVTecAD2
 from dataset_preprocesser import MVTecAD2
+
 os.chdir(original_cwd)  # Change back to original working directory
 
 
