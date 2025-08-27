@@ -3,16 +3,15 @@
 """
 import os
 import sys
-
-import matplotlib.pyplot as plt
+import yaml
+import torch
 import numpy as np
 import seaborn as sns
-import torch
-import yaml
-from deep_feature_anomaly_detector import DeepFeatureAnomalyDetector
-from sklearn.metrics import (classification_report, confusion_matrix,
-                             precision_recall_curve, roc_auc_score)
+import matplotlib.pyplot as plt
+
 from torch import nn
+from tqdm import tqdm
+from torchvision import transforms
 from torch.utils.data import DataLoader
 
 from deep_feature_anomaly_detector import DeepFeatureAnomalyDetector
