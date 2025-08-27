@@ -44,6 +44,7 @@ class DeepFeatureAnomalyDetector(nn.Module):
         Compute the reconstruction error for the input features.
         Outputs an error map that indicates the per-pixel reconstruction error.
         """
+        # mse if you don't want one channel to possibly dominate (average across channels - smoother map)
         error_map = torch.norm(features - reconstructed, p=2, dim=1)
         self.error_map = error_map  # Store the error map for later use
         return error_map

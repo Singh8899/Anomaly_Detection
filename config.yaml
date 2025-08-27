@@ -1,17 +1,16 @@
 DATASET_PATH: "/home/jaspinder/.cache/kagglehub/datasets/mvtec-ad"
-#DATASET_PATH: "/Users/callo/Library/CloudStorage/OneDrive-AlmaMaterStudiorumUniversitàdiBologna/UniBo/Year_2/Semester_1/Artificial_Intelligence_in_Industry/Project/datasets/mvtec-ad"
 
 DATASET_OBJECTS:
-  - bottle
+  - bottle          # foundational
   - cable
   - can # REC
   - capsule
-  - carpet
+  - carpet          # foundational
   - fabric # REC
   - fruit_jelly
   - grid
-  - hazelnut # REC
-  - leather
+  - hazelnut # REC  # foundational
+  - leather         # foundational
   - metal_nut
   - pill
   - rice # REC
@@ -19,12 +18,21 @@ DATASET_OBJECTS:
   - sheet_metal
   - tile
   - toothbrush
-  - transistor
+  - transistor      # foundational
   - vial
   - wallplugs # REC
-  - walnuts # REC
-  - wood
+  - walnuts # REC   # foundational
+  - wood            # foundational
   - zipper
+
+FOUNDATIONAL_OBJECTS:
+  #- bottle
+  - carpet
+  - hazelnut
+  - leather
+  #- transistor
+  #- walnuts
+  - wood
 
 MODELS_CONFIG:
   base_autoencoder:
@@ -60,7 +68,13 @@ MODELS_CONFIG:
     
   DeepFeatureAE:
     batch_size: 64
-    num_epochs: 20
+    num_epochs: 31
     validation_split: 0.1
+    #learning_rate: 1e-2
     learning_rate: 1e-3
-
+    input_size: 224
+    smooth: True
+    layer_hooks: ['layer2', 'layer3']
+    latent_dim: 100
+    is_bn: True
+    threshold_computation_mode: 'all'

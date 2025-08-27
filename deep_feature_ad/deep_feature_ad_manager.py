@@ -13,7 +13,6 @@ from torch import nn
 from tqdm import tqdm
 from torchvision import transforms
 from torch.utils.data import DataLoader
-from sklearn.metrics import roc_auc_score, precision_recall_curve, confusion_matrix, classification_report
 
 from deep_feature_anomaly_detector import DeepFeatureAnomalyDetector
 
@@ -56,7 +55,7 @@ class DeepFeatureADManager:
         if model is not None:
             # If a pre-trained model is provided, use it
             self.model = model
-            print("Using provided pre-trained model.")
+            print("Using provided pre-trained model for manager.")
             
         else:
             self.model = DeepFeatureAnomalyDetector(layer_hooks=self.model_config['layer_hooks'], 

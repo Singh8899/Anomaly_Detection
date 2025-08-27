@@ -69,7 +69,7 @@ class FeatureExtractor(nn.Module):
         # define target size of concatenation with the bigger spatial resolution
         target_size = first_layer_features.shape[-2:] # [28, 28] for layer2
         
-        # TODO: try with transposed convolutions
+        # possibility: use transposed convolutions
         second_layer_resized = F.interpolate(
             second_layer_features, 
             size=target_size, 

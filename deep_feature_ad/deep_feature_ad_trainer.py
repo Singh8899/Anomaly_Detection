@@ -1,19 +1,17 @@
 """
 @author: Carlo Merola
 """
+from email import parser
 import os
 import sys
 import yaml
 import torch
-import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
+import argparse
 
 from torch import nn
 from tqdm import tqdm
 from torchvision import transforms
 from torch.utils.data import DataLoader
-from sklearn.metrics import roc_auc_score, precision_recall_curve, confusion_matrix, classification_report
 
 from deep_feature_ad_manager import DeepFeatureADManager
 from deep_feature_anomaly_detector import DeepFeatureAnomalyDetector
@@ -177,7 +175,10 @@ class DeepFeatureADTrainer:
                 self.optimizer.zero_grad()          # reset gradients from previous iteration
                 loss.backward()                     # compute gradients   
                 self.optimizer.step()               # update weights according to gradients and optimization algorithm
-                self.scheduler.step()               # update learning rate
+
+                # update learning rate scheduler only if setted
+                if self.scheduler:
+                    self.scheduler.step()               # update learning rate
 
                 train_loss += loss.item()
                 train_batches += 1
@@ -274,7 +275,7 @@ class DeepFeatureADTrainer:
         print(f"Anomalies and thresholds plotted for {self.product_class} class.")
     
     
-    def train_foundational(self):
+    def train_foundational(self, scheduler=True):
         """
         Train the model on all classes for foundation model evaluation purposes.
         This method will load the dataset for chosen foundational classes and call the train_single_class method for each class to update parameters.
@@ -309,7 +310,8 @@ class DeepFeatureADTrainer:
                                 )
             
             # Use OneCycleLR scheduler for learning rate scheduling
-            self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.optimizer, 
+            if scheduler:
+                self.scheduler = torch.optim.lr_scheduler.OneCycleLR(self.optimizer, 
                                                                  steps_per_epoch=len(self.train_loader),    # need to initialize the scheduler after the train_loader is created
                                                                  epochs=self.model_config['num_epochs'], 
                                                                  max_lr=float(self.model_config['learning_rate']), 
@@ -357,8 +359,15 @@ class DeepFeatureADTrainer:
 
 
 if __name__ == "__main__":
-    #product_class = "hazelnut"
-    product_class = "foundational"  # Change to 'foundational' to train on all classes for foundational model evaluation
+    parser = argparse.ArgumentParser(description='Deep Feature Anomaly Detection Trainer')
+    parser.add_argument('--product_class', type=str, default='hazelnut', help='Product class to train on')
+    parser.add_argument('--lr_scheduler', type=bool, default=True, help='Use learning rate scheduler')
+    args = parser.parse_args()
+    
+    product_class = args.product_class
+    lr_scheduler = args.lr_scheduler
+
+    #product_class = "foundational"  # Change to 'foundational' to train on all classes for foundational model evaluation
     
     parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     config_path = os.path.join(parent, "config.yaml")
@@ -372,7 +381,6 @@ if __name__ == "__main__":
     os.makedirs(train_path, exist_ok=True)
     os.makedirs(test_path, exist_ok=True)
     
-    """
     # Initialize the trainer
     trainer = DeepFeatureADTrainer(
         config_path=config_path,
@@ -384,14 +392,14 @@ if __name__ == "__main__":
     
     # Train the model on the training dataset
     if product_class == 'foundational':
-        trainer.train_foundational()  # Train on all foundational classes if product_class is 'foundational'
+        trainer.train_foundational(scheduler=lr_scheduler)  # Train on all foundational classes if product_class is 'foundational'
         
         # Save the model weights after training on all foundational classes
         trainer.save_foundational_model()   # already called if not 'foundational', not called if 'foundational'
         # Compute the thresholds for anomaly detection
-    # If product_class is 'foundational', compute thresholds for all classes
+        # If product_class is 'foundational', compute thresholds for all classes
         trainer.compute_foundational_thresholds()
-    else:
+    """else:
         trainer.train_single_class()
         # Compute thresholds for the single class
         trainer.compute_threshold()"""
@@ -401,7 +409,6 @@ if __name__ == "__main__":
     # os.makedirs(model_dir, exist_ok=True)
 
     if product_class == 'foundational':
-
         weight_path = os.path.join(model_dir, f"wood_dfad_weights.pth")
         config = yaml.safe_load(open(config_path, 'r'))
         for product_class in config['FOUNDATIONAL_OBJECTS']:
@@ -417,6 +424,25 @@ if __name__ == "__main__":
             threshold_file = os.path.join(train_path, threshold_file)
             trainer.load_computed_thresholds(threshold_file=threshold_file)
             trainer.generate_segmentation_maps(foundational=True)
+            
+    else:
+        weight_path = os.path.join(model_dir, f"{product_class}_dfad_weights.pth")
+        trainer = DeepFeatureADTrainer(
+            config_path=config_path,
+            train_path=train_path,
+            test_path=test_path,
+            product_class=product_class
+        )
+        trainer.train_single_class()
+        trainer.load_model_weights(weight_path=weight_path)
+        trainer.compute_threshold()  # Compute the threshold for anomaly detection
+        threshold_file = os.path.join(train_path, f"{product_class}_thresholds.yaml")
+        trainer.load_computed_thresholds(threshold_file=threshold_file)  # Load the computed thresholds
+        trainer.generate_segmentation_maps()  # Generate segmentation maps for the test dataset
+        trainer.plot_anomalies_thresholds()  # Plot the anomalies and thresholds
+
+        
+        
     # trainer.compute_threshold()
     # trainer.plot_anomalies_thresholds()
     
