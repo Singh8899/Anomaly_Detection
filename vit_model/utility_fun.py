@@ -1,9 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Mon May 24 17:19:16 2021
-
-@author: pankaj.mishra
-"""
 import cv2
 import matplotlib
 import matplotlib.pyplot as plt
