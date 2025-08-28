@@ -1,10 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-@author: Pankaj Mishra
-
-Refrence: https://github.com/moonl1ght/MDN/blob/master/MDN.ipynb
-for the no of parameters - sum(p.numel() for p in model.parameters() if p.requires_grad)
-"""
 
 import numpy as np
 import torch
