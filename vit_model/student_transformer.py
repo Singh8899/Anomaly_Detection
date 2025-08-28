@@ -1,7 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-@author: Pankaj Mishra
-"""
 
 import torch
 import torch.nn.functional as F
