@@ -1,10 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Mon Aug 24 13:14:10 2020
-
-@author: Pankaj Mishra
-"""
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
